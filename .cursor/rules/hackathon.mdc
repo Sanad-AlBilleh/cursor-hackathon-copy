@@ -1,0 +1,10 @@
+---
+description: Hackathon defaults; agents follow AGENTS.md at repo root
+alwaysApply: true
+---
+
+# Hackathon project
+
+- Follow **AGENTS.md** in the repository root for objectives, verification bar, demo UX, and Cursor workflow notes.
+- Prefer **small patches**, **few dependencies**, and **demo-ready** behavior (loading/empty/error, obvious happy path).
+- Use project **Skills** under `.cursor/skills/` when the user invokes `/rapid-scaffold`, `/integration-spike`, `/debug-and-unblock`, `/ship-demo`, or `/judge-pass`.

@@ -2,6 +2,14 @@
 
 Shared workspace for the hackathon project. Two collaborators use **one integration branch** and short-lived **feature branches**.
 
+## Cursor (AI) setup
+
+- **[AGENTS.md](./AGENTS.md)** — hackathon objectives, verification bar, demo UX, and workflow notes (Max Mode, Plan Mode, MCP, Bugbot, etc.).
+- **`.cursor/rules/hackathon.mdc`** — always-on rule so agents follow `AGENTS.md`.
+- **Project skills** in `.cursor/skills/` — invoke when you want that workflow: `/rapid-scaffold`, `/integration-spike`, `/debug-and-unblock`, `/ship-demo`, `/judge-pass`.
+
+Install [Cursor CLI](https://docs.cursor.com) separately if you want terminal-side agent runs alongside the editor.
+
 ## Branch model (2 people)
 
 | Branch | Purpose |
