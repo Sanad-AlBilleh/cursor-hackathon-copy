@@ -135,7 +135,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-950/40 via-background to-background" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-950/30 via-background to-background" />
 
       <div className="relative z-10 flex flex-col items-center w-full">
         {/* Progress dots */}
@@ -146,9 +146,9 @@ export default function OnboardingPage() {
               className={cn(
                 'h-2 rounded-full transition-all duration-300',
                 i === step
-                  ? 'w-8 bg-violet-500'
+                  ? 'w-8 bg-teal-500'
                   : i < step
-                    ? 'w-2 bg-violet-500/50'
+                    ? 'w-2 bg-teal-500/50'
                     : 'w-2 bg-muted',
               )}
             />
@@ -245,9 +245,9 @@ export default function OnboardingPage() {
                           onClick={() => setCoachPersona(p.id)}
                           className={cn(
                             'flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all cursor-pointer',
-                            'hover:border-violet-500/50 hover:bg-violet-500/5',
+                            'hover:border-teal-500/50 hover:bg-teal-500/5',
                             coachPersona === p.id
-                              ? 'ring-2 ring-violet-500 border-violet-500 bg-violet-500/10'
+                              ? 'ring-2 ring-teal-500 border-teal-500 bg-teal-500/10'
                               : 'border-border',
                           )}
                         >
@@ -313,7 +313,7 @@ export default function OnboardingPage() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label>Noise sensitivity</Label>
-                        <span className="text-sm font-medium capitalize text-violet-400">
+                        <span className="text-sm font-medium capitalize text-teal-400">
                           {noiseSensitivity}
                         </span>
                       </div>
@@ -394,7 +394,7 @@ export default function OnboardingPage() {
             <Button
               onClick={goNext}
               disabled={!canProceed()}
-              className="min-w-[100px] bg-violet-600 text-white hover:bg-violet-700"
+              className="min-w-[100px] bg-teal-600 text-white hover:bg-teal-700"
             >
               Next
             </Button>
@@ -402,7 +402,7 @@ export default function OnboardingPage() {
             <Button
               onClick={handleSubmit}
               disabled={!canProceed() || isSubmitting}
-              className="min-w-[160px] bg-violet-600 text-white hover:bg-violet-700"
+              className="min-w-[160px] bg-teal-600 text-white hover:bg-teal-700"
             >
               {isSubmitting ? (
                 <>

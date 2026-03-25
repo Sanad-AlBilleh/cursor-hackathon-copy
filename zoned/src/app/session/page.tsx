@@ -771,7 +771,7 @@ function SessionContent() {
                   transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.15 }}
                   className="inline-block mb-2"
                 >
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-teal-500/20">
                     <Eye className="w-8 h-8 text-white" />
                   </div>
                 </motion.div>
@@ -830,7 +830,7 @@ function SessionContent() {
                           }}
                           className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                             targetMinutes === mins
-                              ? 'bg-emerald-500 text-white'
+                              ? 'bg-teal-500 text-white'
                               : 'bg-muted text-muted-foreground hover:text-foreground'
                           }`}
                         >
@@ -1416,9 +1416,9 @@ function SessionContent() {
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
             className="fixed bottom-28 left-1/2 z-30 max-w-sm w-full"
           >
-            <Card className="border-emerald-500/30 shadow-lg shadow-emerald-500/10">
+            <Card className="border-teal-500/30 shadow-lg shadow-teal-500/10">
               <CardContent className="p-4 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center shrink-0 text-sm">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center shrink-0 text-sm">
                   🧠
                 </div>
                 <p className="text-sm leading-relaxed">{coachMessage}</p>

@@ -7,8 +7,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   BarChart,
   Bar,
   XAxis,
@@ -29,17 +29,18 @@ interface WeeklyChartProps {
 }
 
 const tooltipStyle: React.CSSProperties = {
-  backgroundColor: 'hsl(0 0% 12%)',
-  border: '1px solid hsl(0 0% 20%)',
-  borderRadius: '8px',
-  color: '#fff',
+  backgroundColor: 'var(--card)',
+  border: '1px solid var(--border)',
+  borderRadius: '12px',
+  color: 'var(--foreground)',
   fontSize: '12px',
   padding: '8px 12px',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
 };
 
 export function WeeklyChart({ data }: WeeklyChartProps) {
   return (
-    <Card>
+    <Card className="border-border/60 shadow-sm">
       <CardHeader>
         <CardTitle>This Week</CardTitle>
       </CardHeader>
@@ -48,35 +49,43 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
           <p className="text-xs text-muted-foreground mb-3">Focus Score Trend</p>
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data}>
+              <AreaChart data={data}>
+                <defs>
+                  <linearGradient id="weeklyScoreGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid
-                  stroke="rgba(255,255,255,0.06)"
+                  stroke="var(--border)"
                   strokeDasharray="3 3"
+                  strokeOpacity={0.5}
                 />
                 <XAxis
                   dataKey="day"
-                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+                  tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
                   domain={[0, 100]}
-                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+                  tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={28}
                 />
                 <Tooltip contentStyle={tooltipStyle} />
-                <Line
+                <Area
                   type="monotone"
                   dataKey="avgScore"
                   name="Avg Score"
-                  stroke="#a78bfa"
+                  stroke="var(--chart-1)"
                   strokeWidth={2.5}
-                  dot={{ fill: '#a78bfa', r: 4, strokeWidth: 0 }}
+                  fill="url(#weeklyScoreGrad)"
+                  dot={{ fill: 'var(--chart-1)', r: 4, strokeWidth: 0 }}
                   activeDot={{ r: 6, strokeWidth: 0 }}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -87,17 +96,18 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>
                 <CartesianGrid
-                  stroke="rgba(255,255,255,0.06)"
+                  stroke="var(--border)"
                   strokeDasharray="3 3"
+                  strokeOpacity={0.5}
                 />
                 <XAxis
                   dataKey="day"
-                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+                  tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+                  tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={28}
@@ -106,8 +116,8 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
                 <Bar
                   dataKey="totalFocusMinutes"
                   name="Focus Min"
-                  fill="#34d399"
-                  radius={[4, 4, 0, 0]}
+                  fill="var(--chart-2)"
+                  radius={[6, 6, 0, 0]}
                 />
               </BarChart>
             </ResponsiveContainer>

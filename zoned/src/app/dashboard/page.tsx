@@ -1,14 +1,12 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import type { Session, Profile } from '@/types/database';
-import { buttonVariants } from '@/components/ui/button-variants';
-import { cn } from '@/lib/utils';
 import { LastSessionCard } from '@/components/dashboard/last-session-card';
 import { WeeklyChart, type WeeklyDataPoint } from '@/components/dashboard/weekly-chart';
 import { AllTimeStats } from '@/components/dashboard/all-time-stats';
 import { BrainSection } from '@/components/dashboard/brain-section';
 import { EmptyState } from '@/components/dashboard/empty-state';
+import { AppHeader } from '@/components/app-header';
 import type { BrainState } from '@/components/brain-mascot';
 
 export default async function DashboardPage() {
@@ -61,8 +59,8 @@ export default async function DashboardPage() {
   if (!latestSession || allSessions.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
-        <main className="max-w-5xl mx-auto px-4 py-8">
+        <AppHeader />
+        <main className="max-w-6xl mx-auto px-4 py-8">
           <EmptyState />
         </main>
       </div>
@@ -99,8 +97,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <AppHeader />
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Your focus overview at a glance
+          </p>
+        </div>
+
         <LastSessionCard session={latestSession} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -118,39 +123,6 @@ export default async function DashboardPage() {
         <BrainSection state={brainState} weeklyAvg={Math.round(weeklyAvg)} />
       </main>
     </div>
-  );
-}
-
-function Header() {
-  return (
-    <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
-      <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/dashboard" className="text-lg font-semibold hover:opacity-80 transition-opacity">
-          Zoned Dashboard
-        </Link>
-
-        <nav className="flex items-center gap-4">
-          <Link
-            href="/session"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Session
-          </Link>
-          <Link
-            href="/settings"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Settings
-          </Link>
-          <Link
-            href="/session"
-            className={cn(buttonVariants({ size: 'sm' }))}
-          >
-            Start New Session
-          </Link>
-        </nav>
-      </div>
-    </header>
   );
 }
 

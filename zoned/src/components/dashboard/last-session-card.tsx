@@ -22,10 +22,10 @@ interface LastSessionCardProps {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 80) return '#eab308';
-  if (score >= 60) return '#22c55e';
-  if (score >= 40) return '#facc15';
-  return '#ef4444';
+  if (score >= 80) return 'var(--chart-2)';
+  if (score >= 60) return 'var(--chart-3)';
+  if (score >= 40) return 'var(--chart-3)';
+  return 'var(--chart-4)';
 }
 
 function scoreLabel(score: number): string {
@@ -33,6 +33,12 @@ function scoreLabel(score: number): string {
   if (score >= 60) return 'Good';
   if (score >= 40) return 'Okay';
   return 'Needs Work';
+}
+
+function scoreTextClass(score: number): string {
+  if (score >= 80) return 'text-emerald-600 dark:text-emerald-400';
+  if (score >= 60) return 'text-amber-600 dark:text-amber-400';
+  return 'text-rose-600 dark:text-rose-400';
 }
 
 export function LastSessionCard({ session }: LastSessionCardProps) {
@@ -63,14 +69,13 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
   });
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-sm">
       <CardHeader>
         <CardTitle>Last Session Report</CardTitle>
         <CardDescription>{sessionDate}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Focus Score */}
           <div className="flex flex-col items-center justify-center gap-2">
             <svg className="w-36 h-36" viewBox="0 0 100 100">
               <circle
@@ -78,9 +83,8 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
                 cy="50"
                 r="42"
                 fill="none"
-                stroke="currentColor"
+                stroke="var(--border)"
                 strokeWidth="6"
-                className="text-muted/30"
               />
               <circle
                 cx="50"
@@ -108,7 +112,7 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
                 x="50"
                 y="63"
                 textAnchor="middle"
-                className="text-[9px] font-medium"
+                className={`text-[9px] font-medium ${scoreTextClass(score)}`}
                 fill={color}
               >
                 {scoreLabel(score)}
@@ -117,7 +121,6 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
             <p className="text-xs text-muted-foreground">Focus Score</p>
           </div>
 
-          {/* Focus vs Distraction + Event Breakdown */}
           <div className="space-y-5">
             <div>
               <p className="text-sm font-medium text-muted-foreground mb-2">
@@ -131,24 +134,24 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
                       type="category"
                       dataKey="name"
                       width={78}
-                      tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 12 }}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <Bar dataKey="minutes" radius={[0, 6, 6, 0]}>
-                      <Cell fill="#22c55e" />
-                      <Cell fill="#ef4444" />
+                      <Cell fill="var(--chart-2)" />
+                      <Cell fill="var(--chart-4)" />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="flex gap-4 text-xs text-muted-foreground mt-1.5">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                   {focusMin}m focus
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400" />
                   {distractMin}m distracted
                 </span>
               </div>
@@ -170,12 +173,11 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
             </div>
           </div>
 
-          {/* Coach Debrief */}
           <div>
             <p className="text-sm font-medium text-muted-foreground mb-2">
               Coach Debrief
             </p>
-            <div className="bg-muted/30 rounded-lg p-3 text-sm leading-relaxed text-muted-foreground">
+            <div className="bg-muted/40 rounded-xl p-3 text-sm leading-relaxed text-muted-foreground">
               {session.coach_debrief_text || 'No debrief available for this session.'}
             </div>
           </div>

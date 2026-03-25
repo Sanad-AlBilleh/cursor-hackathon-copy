@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { ShameTone, CoachPersona, NoiseSensitivity } from '@/types/database';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +28,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { AppHeader } from '@/components/app-header';
 
 function sliderVal(v: number | readonly number[]): number {
   return typeof v === 'number' ? v : v[0];
@@ -147,18 +147,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
+    <div className="min-h-screen bg-background">
+      <AppHeader />
+      <div className="p-4 md:p-8">
       <div className="mx-auto max-w-2xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Link>
-        </div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -180,7 +172,7 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Gaze away threshold</Label>
-                <span className="text-sm tabular-nums font-medium text-violet-400">
+                <span className="text-sm tabular-nums font-medium text-teal-400">
                   {gazeThreshold}s
                 </span>
               </div>
@@ -314,9 +306,9 @@ export default function SettingsPage() {
                   onClick={() => setCoachPersona(p.id)}
                   className={cn(
                     'flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all cursor-pointer',
-                    'hover:border-violet-500/50 hover:bg-violet-500/5',
+                    'hover:border-teal-500/50 hover:bg-teal-500/5',
                     coachPersona === p.id
-                      ? 'ring-2 ring-violet-500 border-violet-500 bg-violet-500/10'
+                      ? 'ring-2 ring-teal-500 border-teal-500 bg-teal-500/10'
                       : 'border-border',
                   )}
                 >
@@ -333,7 +325,7 @@ export default function SettingsPage() {
         <Button
           onClick={handleSave}
           disabled={saving}
-          className="w-full bg-violet-600 text-white hover:bg-violet-700"
+          className="w-full bg-teal-600 text-white hover:bg-teal-700"
           size="lg"
         >
           {saving ? (
@@ -347,6 +339,7 @@ export default function SettingsPage() {
         </Button>
 
         <div className="h-8" />
+      </div>
       </div>
     </div>
   );
