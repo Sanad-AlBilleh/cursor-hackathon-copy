@@ -136,6 +136,18 @@ function SessionContent() {
   const timer = useSessionTimer(phase === 'active');
 
   // ------------------------------------------------------------------
+  // Attach media stream to video element once both are available
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = mediaStreamRef.current;
+    if (video && stream && phase === 'active') {
+      video.srcObject = stream;
+      video.play().catch(() => {});
+    }
+  }, [phase]);
+
+  // ------------------------------------------------------------------
   // Load profile on mount
   // ------------------------------------------------------------------
   useEffect(() => {
@@ -384,11 +396,6 @@ function SessionContent() {
 
       mediaStreamRef.current = stream;
       setAudioStream(stream);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
-      }
     } catch (err) {
       if (err instanceof DOMException) {
         if (err.name === 'NotAllowedError') {
@@ -738,13 +745,7 @@ function SessionContent() {
                 animate={{ opacity: showCamera ? 1 : 0, scale: showCamera ? 1 : 0.8 }}
                 className="w-40 h-[120px] rounded-lg overflow-hidden bg-black/80 border border-border shadow-xl"
               >
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover -scale-x-100"
-                />
+                <CameraPreview stream={mediaStreamRef.current} />
               </motion.div>
             </div>
 
@@ -834,6 +835,16 @@ function SessionContent() {
         )}
       </AnimatePresence>
 
+      {/* Hidden video element — always mounted so gaze detection can use it */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="sr-only"
+        aria-hidden="true"
+      />
+
       {/* =================== Coach overlay =================== */}
       <AnimatePresence>
         {coachMessage && phase === 'active' && (
@@ -856,6 +867,25 @@ function SessionContent() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function CameraPreview({ stream }: { stream: MediaStream | null }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+      ref.current.play().catch(() => {});
+    }
+  }, [stream]);
+  return (
+    <video
+      ref={ref}
+      autoPlay
+      playsInline
+      muted
+      className="w-full h-full object-cover -scale-x-100"
+    />
   );
 }
 

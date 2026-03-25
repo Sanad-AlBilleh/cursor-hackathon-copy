@@ -16,7 +16,7 @@ const SENSITIVITY_THRESHOLDS: Record<NoiseSensitivity, number> = {
   high: 100,
 };
 
-const SAMPLE_INTERVAL_MS = 10_000;
+const DISPLAY_INTERVAL_MS = 500;
 const NOISE_FLAG_DURATION_S = 30;
 
 function classifyNoise(
@@ -67,6 +67,7 @@ export function useAudioDetection(
   const analyserRef = useRef<AnalyserNode | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const noiseDurationRef = useRef(0);
+  const lastAboveRef = useRef(false);
 
   useEffect(() => {
     if (!stream || !enabled) {
@@ -77,6 +78,7 @@ export function useAudioDetection(
       ctxRef.current = null;
       analyserRef.current = null;
       noiseDurationRef.current = 0;
+      lastAboveRef.current = false;
       setState({
         isNoisy: false,
         averageDb: 0,
@@ -91,6 +93,7 @@ export function useAudioDetection(
 
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.3;
     analyserRef.current = analyser;
 
     try {
@@ -116,8 +119,12 @@ export function useAudioDetection(
       for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
       const avg = sum / dataArray.length;
 
-      if (avg > threshold) {
-        noiseDurationRef.current += SAMPLE_INTERVAL_MS / 1000;
+      const aboveThreshold = avg > threshold;
+
+      if (aboveThreshold) {
+        noiseDurationRef.current += DISPLAY_INTERVAL_MS / 1000;
+        lastAboveRef.current = true;
+
         const noiseType = classifyNoise(
           dataArray,
           audioCtx.sampleRate,
@@ -132,7 +139,10 @@ export function useAudioDetection(
           continuousNoiseDuration: noiseDurationRef.current,
         });
       } else {
-        noiseDurationRef.current = 0;
+        if (lastAboveRef.current) {
+          noiseDurationRef.current = 0;
+          lastAboveRef.current = false;
+        }
         setState((prev) => ({
           ...prev,
           isNoisy: false,
@@ -140,7 +150,7 @@ export function useAudioDetection(
           continuousNoiseDuration: 0,
         }));
       }
-    }, SAMPLE_INTERVAL_MS);
+    }, DISPLAY_INTERVAL_MS);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
