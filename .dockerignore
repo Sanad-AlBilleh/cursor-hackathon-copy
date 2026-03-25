@@ -1,0 +1,16 @@
+**/node_modules
+**/.next
+**/.git
+**/.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+**/npm-debug.log*
+**/.DS_Store
+**/*.pem
+.vscode
+.cursor
+docs
+agent-transcripts
+mcps
+terminals

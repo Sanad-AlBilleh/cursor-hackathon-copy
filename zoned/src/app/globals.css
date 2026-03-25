@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Calibri', 'Trebuchet MS', 'Gill Sans', sans-serif;
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
-  --font-heading: 'Calibri', 'Trebuchet MS', 'Gill Sans', sans-serif;
+  --font-heading: var(--font-fraunces), ui-serif, Georgia, 'Times New Roman', serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -123,8 +123,18 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image: radial-gradient(
+        ellipse 120% 80% at 100% -20%,
+        oklch(0.92 0.04 185 / 35%),
+        transparent 50%
+      ),
+      radial-gradient(
+        ellipse 80% 50% at 0% 100%,
+        oklch(0.93 0.03 250 / 40%),
+        transparent 45%
+      );
   }
-  html {
-    font-family: 'Calibri', 'Trebuchet MS', 'Gill Sans', sans-serif;
+  .font-heading {
+    font-family: var(--font-heading);
   }
 }

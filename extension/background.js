@@ -9,6 +9,9 @@ const ZONED_PATTERNS = [
 
 let distractionTabId = null;
 
+/** Active distraction timing for Zoned tab (level 0–4 + seconds). */
+let distractionMeta = null;
+
 // ── Session state (stored in chrome.storage.local) ───────────────────────
 
 async function isSessionActive() {
@@ -66,10 +69,53 @@ async function notifyZonedTabs(payload) {
 function buildPayload(url) {
   const site = getDistractingSite(url);
   if (site) {
-    return { type: 'ZONED_DISTRACTION', name: site.name, category: site.category, url };
+    return {
+      type: 'ZONED_DISTRACTION',
+      name: site.name,
+      category: site.category,
+      url,
+      level: 0,
+      seconds: 0,
+    };
   }
   return { type: 'ZONED_TAB_INFO', isDistracting: false, url };
 }
+
+function distractionLevelFromSeconds(sec) {
+  if (sec >= 30) return 4;
+  if (sec >= 22) return 3;
+  if (sec >= 15) return 2;
+  if (sec >= 8) return 1;
+  return 0;
+}
+
+function pulseDistraction() {
+  if (!distractionMeta) return;
+  chrome.tabs.get(distractionMeta.tabId, (tab) => {
+    if (chrome.runtime.lastError || !tab?.url) return;
+    const site = getDistractingSite(tab.url);
+    if (!site) {
+      distractionMeta = null;
+      chrome.alarms.clear('zoned-distraction-pulse');
+      return;
+    }
+    const sec = Math.floor((Date.now() - distractionMeta.since) / 1000);
+    const level = distractionLevelFromSeconds(sec);
+    notifyZonedTabs({
+      type: 'ZONED_DISTRACTION_TICK',
+      name: site.name,
+      category: site.category,
+      seconds: sec,
+      level,
+    });
+  });
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== 'zoned-distraction-pulse') return;
+  pulseDistraction();
+  chrome.alarms.create('zoned-distraction-pulse', { delayInMinutes: 1 / 60 });
+});
 
 // ── Self-escalating script injected into the distraction tab ─────────────
 function injectedEscalationScript(siteName) {
@@ -246,6 +292,8 @@ async function startEscalation(tabId, siteName) {
 
 async function stopEscalation() {
   chrome.notifications.clear('zoned-distraction');
+  distractionMeta = null;
+  chrome.alarms.clear('zoned-distraction-pulse');
 
   if (distractionTabId !== null) {
     try {
@@ -268,6 +316,8 @@ async function handleTabChange(tabId, url) {
   const hasSession = await isSessionActive();
   console.log('[Zoned] Session active?', hasSession);
   if (!hasSession) {
+    distractionMeta = null;
+    chrome.alarms.clear('zoned-distraction-pulse');
     if (distractionTabId !== null) await stopEscalation();
     return;
   }
@@ -278,8 +328,20 @@ async function handleTabChange(tabId, url) {
       await stopEscalation();
       await startEscalation(tabId, payload.name);
     }
+    if (!distractionMeta || distractionMeta.tabId !== tabId) {
+      distractionMeta = {
+        tabId,
+        name: payload.name,
+        category: payload.category,
+        since: Date.now(),
+      };
+    }
+    chrome.alarms.clear('zoned-distraction-pulse');
+    chrome.alarms.create('zoned-distraction-pulse', { delayInMinutes: 1 / 60 });
   } else {
     console.log('[Zoned] Safe tab');
+    distractionMeta = null;
+    chrome.alarms.clear('zoned-distraction-pulse');
     if (distractionTabId !== null) {
       await stopEscalation();
     }

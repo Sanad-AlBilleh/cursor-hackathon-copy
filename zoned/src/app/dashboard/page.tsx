@@ -28,7 +28,9 @@ export default async function DashboardPage() {
         .single(),
       supabase
         .from('sessions')
-        .select('started_at, focus_score, focus_seconds')
+        .select(
+          'started_at, focus_score, focus_seconds, gaze_away_count, tab_switch_count, static_page_count, afk_count, noise_event_count',
+        )
         .eq('user_id', user.id)
         .gte(
           'started_at',
@@ -48,6 +50,11 @@ export default async function DashboardPage() {
       started_at: string;
       focus_score: number | null;
       focus_seconds: number | null;
+      gaze_away_count: number;
+      tab_switch_count: number;
+      static_page_count: number;
+      afk_count: number;
+      noise_event_count: number;
     }[]) ?? [];
   const allSessions =
     (allResult.data as {
@@ -89,10 +96,22 @@ export default async function DashboardPage() {
       ? weeklyScores.reduce((a, b) => a + b, 0) / weeklyScores.length
       : 0;
 
+  const weeklyDistractionEvents = recentSessions.reduce(
+    (sum, s) =>
+      sum +
+      (s.gaze_away_count ?? 0) +
+      (s.tab_switch_count ?? 0) +
+      (s.static_page_count ?? 0) +
+      (s.afk_count ?? 0) +
+      (s.noise_event_count ?? 0),
+    0,
+  );
+  const brainTier = Math.min(4, Math.floor(weeklyDistractionEvents / 5));
+
   let brainState: BrainState;
-  if (weeklyAvg >= 80) brainState = 'thriving';
-  else if (weeklyAvg >= 60) brainState = 'recovering';
-  else if (weeklyAvg >= 40) brainState = 'stressed';
+  if (brainTier === 0) brainState = 'thriving';
+  else if (brainTier === 1) brainState = 'recovering';
+  else if (brainTier === 2) brainState = 'stressed';
   else brainState = 'damaged';
 
   return (
@@ -100,8 +119,10 @@ export default async function DashboardPage() {
       <AppHeader />
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="font-heading text-3xl font-bold tracking-tight">
+            Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Your focus overview at a glance
           </p>
         </div>
@@ -120,7 +141,11 @@ export default async function DashboardPage() {
           />
         </div>
 
-        <BrainSection state={brainState} weeklyAvg={Math.round(weeklyAvg)} />
+        <BrainSection
+          state={brainState}
+          weeklyAvg={Math.round(weeklyAvg)}
+          weeklyDistractionEvents={weeklyDistractionEvents}
+        />
       </main>
     </div>
   );

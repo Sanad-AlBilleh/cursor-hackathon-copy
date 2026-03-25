@@ -4,7 +4,7 @@ export type NoiseSensitivity = 'low' | 'medium' | 'high';
 export type SessionStatus = 'active' | 'ended';
 export type DistractionEventType = 'gaze_away' | 'tab_switch' | 'static_page' | 'afk' | 'noise';
 export type NoiseDetectedType = 'crowd' | 'music' | 'tv' | 'general_noise' | 'conversation';
-export type TriggerReason = '30min_afk' | '5x_gaze_away';
+export type TriggerReason = '10x_gaze_away' | '15min_idle' | 'manual';
 
 export interface Profile {
   id: string;

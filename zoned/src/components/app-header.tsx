@@ -18,17 +18,17 @@ export function AppHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-border/60 bg-card/70 backdrop-blur-md sticky top-0 z-40">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-card/80 backdrop-blur-xl supports-[backdrop-filter]:bg-card/60">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            className="group flex items-center gap-2.5 transition-opacity hover:opacity-90"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center">
-              <Brain className="w-4 h-4 text-white" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 via-emerald-600 to-cyan-600 shadow-md shadow-teal-500/20 ring-1 ring-white/10">
+              <Brain className="h-4 w-4 text-white" />
             </div>
-            <span className="text-lg font-semibold tracking-tight">
+            <span className="font-heading text-xl font-semibold tracking-tight">
               Zoned
             </span>
           </Link>

@@ -13,6 +13,8 @@ import {
 interface BrainSectionProps {
   state: BrainState;
   weeklyAvg: number;
+  /** Sum of distraction events this week — mascot tier steps every 5 */
+  weeklyDistractionEvents: number;
 }
 
 const stateMessages: Record<BrainState, string> = {
@@ -24,8 +26,14 @@ const stateMessages: Record<BrainState, string> = {
   cracking: 'Stay focused — you got this!',
 };
 
-export function BrainSection({ state, weeklyAvg }: BrainSectionProps) {
+export function BrainSection({
+  state,
+  weeklyAvg,
+  weeklyDistractionEvents,
+}: BrainSectionProps) {
   const [open, setOpen] = useState(false);
+  const mod = weeklyDistractionEvents % 5;
+  const nextStep = mod === 0 ? 5 : 5 - mod;
 
   return (
     <div className="flex flex-col items-center py-6">
@@ -36,8 +44,17 @@ export function BrainSection({ state, weeklyAvg }: BrainSectionProps) {
       >
         <BrainMascot state={state} showMessage={stateMessages[state]} />
       </button>
-      <p className="text-xs text-muted-foreground mt-3">
-        7-day avg: <span className="font-semibold tabular-nums">{weeklyAvg}</span>
+      <p className="text-xs text-muted-foreground mt-3 text-center max-w-sm">
+        7-day score avg:{' '}
+        <span className="font-semibold tabular-nums">{weeklyAvg}</span>
+        {' · '}
+        <span className="text-foreground/80">
+          {weeklyDistractionEvents} distraction events this week
+        </span>
+        <br />
+        <span className="opacity-80">
+          Mascot updates every 5 events (~{nextStep} until next step)
+        </span>
         {' · '}Click the brain to learn more
       </p>
 

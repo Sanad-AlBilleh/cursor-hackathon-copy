@@ -39,6 +39,13 @@ export function useIdleDetection(enabled: boolean) {
     );
 
     intervalRef.current = setInterval(() => {
+      // Another app focused or tab hidden: no fair idle signal.
+      if (document.hidden || !document.hasFocus()) {
+        setState((prev) =>
+          prev.isIdle ? { isIdle: false, idleDuration: 0 } : prev,
+        );
+        return;
+      }
       const elapsed = Date.now() - lastInteractionRef.current;
       if (elapsed >= IDLE_THRESHOLD_MS) {
         setState({ isIdle: true, idleDuration: Math.round(elapsed / 1000) });

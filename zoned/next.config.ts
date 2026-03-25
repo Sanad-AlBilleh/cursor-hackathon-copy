@@ -3,6 +3,7 @@ import type { NextConfig } from 'next';
 const appDir = import.meta.dirname!;
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   turbopack: {
     resolveAlias: {
       tailwindcss: `${appDir}/node_modules/tailwindcss/index.css`,

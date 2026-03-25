@@ -7,7 +7,13 @@
 
 // Background → React app
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.type !== 'ZONED_DISTRACTION' && message.type !== 'ZONED_TAB_INFO') return;
+  if (
+    message.type !== 'ZONED_DISTRACTION' &&
+    message.type !== 'ZONED_TAB_INFO' &&
+    message.type !== 'ZONED_DISTRACTION_TICK'
+  ) {
+    return;
+  }
   window.postMessage(message, window.location.origin);
 });
 

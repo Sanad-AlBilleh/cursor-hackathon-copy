@@ -1,60 +1,40 @@
-# Cursor-Hackathon
+# Zoned — AI Focus Coach
 
-Shared workspace for the hackathon project. Two collaborators use **one integration branch** and short-lived **feature branches**.
+Zoned watches your focus in real time using your webcam, mic, and browser activity — and nudges you back on track when you drift.
 
-## Cursor (AI) setup
+---
 
-- **[AGENTS.md](./AGENTS.md)** — primary agent instructions (hackathon goals + **read `docs/` first** + verification + Cursor workflow).
-- **`docs/`** — living project memory: [spec](./docs/spec.md), [steps](./docs/steps.md), [learned](./docs/learned.md), [demo](./docs/demo.md).
-- **`.cursor/rules/hackathon.mdc`** — always-on rule pointing at `AGENTS.md` and `docs/`.
-- **Project skills** (`.cursor/skills/`): `/rapid-scaffold`, `/plan-feature`, `/integration-spike`, `/debug-with-evidence`, `/ship-demo`, `/judge-pass`, `/close-task`.
-- **[CURSOR_SETUP.md](./CURSOR_SETUP.md)** — what is repo-based vs what you toggle in the Cursor app (Max Mode, MCP, etc.).
+## 1. Install the Extension
 
-Install [Cursor CLI](https://docs.cursor.com) if you want terminal-side agent runs; it respects the same project instructions.
+1. Open Chrome and go to `chrome://extensions`
+2. Enable **Developer mode** (toggle in the top-right corner)
+3. Click **Load unpacked**
+4. Select the `extension/` folder from this project
+5. Pin the **Zoned** extension to your toolbar so you can see its icon
 
-## Branch model (2 people)
+## 2. Start a Focus Session
 
-| Branch | Purpose |
-|--------|---------|
-| `main` | Stable, demo-ready, tagged releases if needed |
-| `develop` | Day-to-day integration; merge feature work here first |
-| `feature/<short-name>` | One branch per task or person (e.g. `feature/auth-api`, `feature/jane-ui`) |
+1. Run the app locally (see below) and open it in Chrome
+2. Start a new focus session from the dashboard
 
-**Flow:** branch from `develop` → open PR into `develop` → when ready, PR `develop` → `main`.
+## 3. Try It Out
 
-## Publish to GitHub (first time)
+With your session running, test these scenarios:
 
-1. Log in (one-time): `gh auth login`
-2. Create the remote and push (from this folder):
+- **Open Instagram or YouTube** — Zoned detects the distracting tab and flags it
+- **Look away** (left, right, or down) — the gaze tracker notices you're not looking at the screen
+- **Make noise** behind you (talk, play music) — the ambient noise detector picks it up
+- **Walk away** from your laptop — Zoned detects you've left entirely
 
-```bash
-cd /Users/habibrahal/Documents/GitHub/Hackathons
-gh repo create Cursor-Hackathon --public --source=. --remote=origin --push
-```
+Each of these triggers a real-time distraction event in your session.
 
-If the repo already exists under your account:
+## Quick Start (Dev)
 
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/Cursor-Hackathon.git
-git push -u origin main
-git push -u origin develop
+cd zoned
+cp .env.example .env   # fill in your API keys
+npm install
+npm run dev
 ```
 
-## Optional: GitLab mirror
-
-Useful if your team tracks work in GitLab or you want a backup remote.
-
-```bash
-git remote add gitlab git@gitlab.com:YOUR_GROUP_OR_USER/Cursor-Hackathon.git
-git push gitlab main
-git push gitlab develop
-```
-
-To push all branches and tags once:
-
-```bash
-git push gitlab --all
-git push gitlab --tags
-```
-
-Keep `origin` as GitHub for day-to-day work, or set GitLab as a [mirror](https://docs.gitlab.com/ee/user/project/repository/mirror/) from the GitLab project settings.
+Then open [http://localhost:3000](http://localhost:3000) in Chrome.

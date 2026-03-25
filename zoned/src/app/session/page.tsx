@@ -21,6 +21,7 @@ import {
   Coffee,
   X,
   MapPin,
+  MessageSquare,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -34,11 +35,13 @@ import { useIdleDetection } from '@/hooks/use-idle-detection';
 import { useSessionTimer } from '@/hooks/use-session-timer';
 import { useFocusTimer } from '@/hooks/use-focus-timer';
 import { usePictureInPicture } from '@/hooks/use-picture-in-picture';
+import { useSensingContext } from '@/hooks/use-sensing-context';
 import type {
   Profile,
   DistractionEventType,
   NoiseSensitivity,
 } from '@/types/database';
+import { toast } from 'sonner';
 
 type SessionPhase = 'idle' | 'active' | 'ended';
 
@@ -195,12 +198,13 @@ function SessionContent() {
   const [showCustomTimer, setShowCustomTimer] = useState(false);
   const [gazeAlarmLevel, setGazeAlarmLevel] = useState(0);
   const [envPopup, setEnvPopup] = useState<string | null>(null);
+  const [manualNotifySent, setManualNotifySent] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const statsRef = useRef<SessionStats>({ ...INITIAL_STATS });
   const gazeTimestampsRef = useRef<number[]>([]);
-  const accountabilityTriggeredRef = useRef(false);
+  const accountabilityTriggeredRef = useRef<Set<string>>(new Set());
   const lastNudgeRef = useRef(0);
   const isDistractedRef = useRef(false);
   const distractionStartRef = useRef<number | null>(null);
@@ -220,7 +224,8 @@ function SessionContent() {
   const lastGazeAlarmLevelRef = useRef(0);
   const envPopupCooldownRef = useRef(0);
 
-  const gazeState = useGazeDetection(videoRef, phase === 'active');
+  const sensingOk = useSensingContext(phase === 'active');
+  const gazeState = useGazeDetection(videoRef, phase === 'active' && sensingOk);
   const audioState = useAudioDetection(
     audioStream,
     phase === 'active',
@@ -352,14 +357,22 @@ function SessionContent() {
   useEffect(() => {
     if (phase !== 'active') return;
 
-    const afkTriggered = gazeState.noFaceDetected && gazeAwayStartRef.current != null &&
+    const faceOrGazeAway =
+      sensingOk &&
+      (gazeState.noFaceDetected ||
+        (gazeState.isCalibrated && gazeState.isLookingAway));
+
+    const afkTriggered =
+      sensingOk &&
+      gazeState.noFaceDetected &&
+      gazeAwayStartRef.current != null &&
       Date.now() - gazeAwayStartRef.current >= 60_000;
 
     // Only count gaze as "away" when calibrated. During calibration
     // (initial or after AFK return) we can't judge gaze yet — don't
     // carry stale isLookingAway=true from the AFK period.
     const flags = {
-      gazeAway: gazeState.noFaceDetected || (gazeState.isCalibrated && gazeState.isLookingAway),
+      gazeAway: faceOrGazeAway,
       afk: afkTriggered,
       tabAway: tabState.isDistractedByTab,
       idle: idleState.isIdle,
@@ -443,6 +456,8 @@ function SessionContent() {
     idleState,
     audioState,
     phase,
+    sensingOk,
+    profile?.gaze_threshold_seconds,
     logEvent,
     requestNudge,
   ]);
@@ -520,34 +535,37 @@ function SessionContent() {
   useEffect(() => {
     if (phase !== 'active') return;
     const id = setInterval(async () => {
-      if (accountabilityTriggeredRef.current || !sessionIdRef.current) return;
+      if (!sessionIdRef.current) return;
 
       if (
         distractionStartRef.current &&
-        Date.now() - distractionStartRef.current >= 30 * 60 * 1000
+        Date.now() - distractionStartRef.current >= 15 * 60 * 1000
       ) {
-        triggerAccountability('30min_afk');
+        if (!accountabilityTriggeredRef.current.has('15min_idle')) {
+          triggerAccountability('15min_idle');
+        }
         return;
       }
 
       const oneHourAgo = Date.now() - 60 * 60 * 1000;
       const recent = gazeTimestampsRef.current.filter((t) => t > oneHourAgo);
-      if (recent.length >= 5) {
-        triggerAccountability('5x_gaze_away');
+      if (recent.length >= 10) {
+        if (!accountabilityTriggeredRef.current.has('10x_gaze_away')) {
+          triggerAccountability('10x_gaze_away');
+        }
       }
     }, 60_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  async function triggerAccountability(reason: '30min_afk' | '5x_gaze_away') {
-    accountabilityTriggeredRef.current = true;
+  async function triggerAccountability(reason: '10x_gaze_away' | '15min_idle' | 'manual') {
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user || !sessionIdRef.current) return;
-      await fetch('/api/accountability', {
+      const res = await fetch('/api/accountability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -556,7 +574,20 @@ function SessionContent() {
           trigger_reason: reason,
         }),
       });
-    } catch {}
+      if (res.ok) {
+        accountabilityTriggeredRef.current.add(reason);
+        toast.success('Accountability partner notified via WhatsApp');
+      } else {
+        toast.error('Failed to notify partner. Check settings.');
+      }
+    } catch {
+      toast.error('Failed to notify partner. Check settings.');
+    }
+  }
+
+  async function notifyPartner() {
+    await triggerAccountability('manual');
+    setManualNotifySent(true);
   }
 
   // ------------------------------------------------------------------
@@ -639,7 +670,7 @@ function SessionContent() {
       sessionIdRef.current = data.session_id;
       statsRef.current = { ...INITIAL_STATS };
       gazeTimestampsRef.current = [];
-      accountabilityTriggeredRef.current = false;
+      accountabilityTriggeredRef.current = new Set();
       distractionStartRef.current = null;
       isDistractedRef.current = false;
       prevFlags.current = { gazeAway: false, afk: false, tabAway: false, idle: false, noisy: false };
@@ -726,22 +757,43 @@ function SessionContent() {
   // ------------------------------------------------------------------
   // Derived state
   // ------------------------------------------------------------------
+  const gazeContributes =
+    sensingOk &&
+    (gazeState.noFaceDetected ||
+      (gazeState.isCalibrated && gazeState.isLookingAway));
+
   const isDistracted =
-    gazeState.noFaceDetected ||
-    (gazeState.isCalibrated && gazeState.isLookingAway) ||
+    gazeContributes ||
     tabState.isDistractedByTab ||
     idleState.isIdle ||
     audioState.isNoisy;
 
+  const tabPanic =
+    phase === 'active' &&
+    tabState.isDistractedByTab &&
+    tabState.distractingSeconds >= 30;
+
+  useEffect(() => {
+    if (!tabPanic) return;
+    const id = setInterval(() => playCriticalAlarm(), 750);
+    return () => clearInterval(id);
+  }, [tabPanic]);
+
   const distractionLabel = (() => {
-    if (gazeState.noFaceDetected) return 'AFK — No face detected';
     if (tabState.isDistractedByTab && tabState.distractingSite) {
       const cat = tabState.distractingCategory ? ` · ${tabState.distractingCategory}` : '';
-      return `${tabState.distractingSite}${cat}`;
+      return `${tabState.distractingSite}${cat} · alert ${tabState.distractingLevel}/4`;
     }
-    if (gazeState.trackingConfidence === 'low' && gazeState.isCalibrated && gazeState.isLookingAway)
+    if (sensingOk && gazeState.noFaceDetected) return 'AFK — No face detected';
+    if (
+      sensingOk &&
+      gazeState.trackingConfidence === 'low' &&
+      gazeState.isCalibrated &&
+      gazeState.isLookingAway
+    )
       return 'Eyes not visible';
-    if (gazeState.isCalibrated && gazeState.isLookingAway) return `Looking ${gazeState.gazeDirection}`;
+    if (sensingOk && gazeState.isCalibrated && gazeState.isLookingAway)
+      return `Looking ${gazeState.gazeDirection}`;
     if (idleState.isIdle) return 'Idle — No activity';
     if (audioState.isNoisy) return `Noise: ${audioState.detectedType ?? 'detected'}`;
     return null;
@@ -951,6 +1003,14 @@ function SessionContent() {
                     {distractionElapsed}s
                   </span>
                 )}
+                {tabState.isDistractedByTab && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] border-amber-500/70 text-amber-500 tabular-nums"
+                  >
+                    Site {tabState.distractingLevel}/4
+                  </Badge>
+                )}
                 {gazeState.isLoading && (
                   <Badge variant="secondary" className="text-xs">
                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -999,6 +1059,18 @@ function SessionContent() {
               </div>
 
               <div className="flex items-center gap-2">
+                {profile?.accountability_partner_phone && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-teal-500/50 text-teal-400 hover:bg-teal-500/10"
+                    onClick={notifyPartner}
+                    disabled={manualNotifySent}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-1" />
+                    {manualNotifySent ? 'Partner Notified \u2713' : 'Notify Partner'}
+                  </Button>
+                )}
                 {/* Break button */}
                 {phase === 'active' && !focusTimer.isCompleted && (
                   focusTimer.isOnBreak ? (
@@ -1115,6 +1187,35 @@ function SessionContent() {
                 )}
               </AnimatePresence>
             </main>
+
+            {/* Tab distraction — 30s+ on blocklisted site (extension): full-screen alarm in Zoned */}
+            <AnimatePresence>
+              {tabPanic && (
+                <motion.div
+                  key="tab-panic"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 px-6 text-center"
+                  style={{
+                    background: 'rgba(127, 29, 29, 0.92)',
+                    backdropFilter: 'blur(6px)',
+                  }}
+                >
+                  <AlertTriangle className="w-16 h-16 text-white shrink-0" />
+                  <h2 className="text-2xl font-black uppercase tracking-widest text-white">
+                    Unproductive site — 30s+
+                  </h2>
+                  <p className="text-red-100 text-sm max-w-md">
+                    Close {tabState.distractingSite ?? 'that tab'} and return to your focus session.
+                    The extension is also alerting you on that site.
+                  </p>
+                  <p className="font-mono text-4xl font-bold text-red-200 tabular-nums">
+                    {tabState.distractingSeconds}s
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Gaze alarm overlays */}
             <AnimatePresence>

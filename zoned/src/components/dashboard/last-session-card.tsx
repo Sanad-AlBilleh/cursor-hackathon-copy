@@ -8,14 +8,7 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import type { Session } from '@/types/database';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts';
+import { FocusSplitBar } from '@/components/focus-split-bar';
 
 interface LastSessionCardProps {
   session: Session;
@@ -45,13 +38,7 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
   const score = session.focus_score ?? 0;
   const focusMin = Math.round((session.focus_seconds ?? 0) / 60);
   const distractMin = Math.round((session.distraction_seconds ?? 0) / 60);
-  const totalMin = Math.max(focusMin + distractMin, 1);
   const color = scoreColor(score);
-
-  const barData = [
-    { name: 'Focus', minutes: focusMin },
-    { name: 'Distraction', minutes: distractMin },
-  ];
 
   const events = [
     { label: 'Gaze Away', count: session.gaze_away_count, icon: '👀' },
@@ -69,9 +56,9 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
   });
 
   return (
-    <Card className="border-border/60 shadow-sm">
+    <Card className="border-border/60 shadow-sm overflow-hidden ring-1 ring-primary/5">
       <CardHeader>
-        <CardTitle>Last Session Report</CardTitle>
+        <CardTitle className="font-heading text-xl">Last session</CardTitle>
         <CardDescription>{sessionDate}</CardDescription>
       </CardHeader>
       <CardContent>
@@ -124,37 +111,9 @@ export function LastSessionCard({ session }: LastSessionCardProps) {
           <div className="space-y-5">
             <div>
               <p className="text-sm font-medium text-muted-foreground mb-2">
-                Focus vs Distraction
+                Focus vs distraction
               </p>
-              <div className="h-[72px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} layout="vertical" barSize={22}>
-                    <XAxis type="number" domain={[0, totalMin]} hide />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={78}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Bar dataKey="minutes" radius={[0, 6, 6, 0]}>
-                      <Cell fill="var(--chart-2)" />
-                      <Cell fill="var(--chart-4)" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex gap-4 text-xs text-muted-foreground mt-1.5">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                  {focusMin}m focus
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400" />
-                  {distractMin}m distracted
-                </span>
-              </div>
+              <FocusSplitBar focusMinutes={focusMin} distractionMinutes={distractMin} />
             </div>
 
             <div>

@@ -71,8 +71,10 @@ export default function LoginPage() {
               <Brain className="w-10 h-10 text-white" />
             </div>
           </motion.div>
-          <h1 className="text-3xl font-bold tracking-tight">Zoned</h1>
-          <p className="text-muted-foreground mt-2">AI-powered focus accountability</p>
+          <h1 className="font-heading text-4xl font-bold tracking-tight">Zoned</h1>
+          <p className="mt-2 text-muted-foreground">
+            Real-time focus sensing · accountability that sticks
+          </p>
         </div>
 
         <Card className="shadow-xl shadow-black/5 dark:shadow-black/20 border-border/60">
