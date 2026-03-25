@@ -11,9 +11,9 @@ export interface AudioDetectionState {
 }
 
 const SENSITIVITY_THRESHOLDS: Record<NoiseSensitivity, number> = {
-  low: 180,
-  medium: 140,
-  high: 100,
+  low: 220,
+  medium: 190,
+  high: 150,
 };
 
 const DISPLAY_INTERVAL_MS = 500;

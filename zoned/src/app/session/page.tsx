@@ -124,6 +124,8 @@ function SessionContent() {
     idle: false,
     noisy: false,
   });
+  const gazeAwayStartRef = useRef<number | null>(null);
+  const gazeEventFiredRef = useRef(false);
 
   const gazeState = useGazeDetection(videoRef, phase === 'active');
   const audioState = useAudioDetection(
@@ -251,12 +253,25 @@ function SessionContent() {
 
     const prev = prevFlags.current;
 
-    if (flags.gazeAway && !prev.gazeAway) {
-      statsRef.current.gazeAwayCount++;
-      gazeTimestampsRef.current.push(Date.now());
-      logEvent('gaze_away');
-      requestNudge('gaze_away');
-      playBeep();
+    const gazeGraceMs = (profile?.gaze_threshold_seconds ?? 20) * 1000;
+    if (flags.gazeAway) {
+      if (!gazeAwayStartRef.current) {
+        gazeAwayStartRef.current = Date.now();
+        gazeEventFiredRef.current = false;
+      } else if (
+        !gazeEventFiredRef.current &&
+        Date.now() - gazeAwayStartRef.current >= gazeGraceMs
+      ) {
+        gazeEventFiredRef.current = true;
+        statsRef.current.gazeAwayCount++;
+        gazeTimestampsRef.current.push(Date.now());
+        logEvent('gaze_away');
+        requestNudge('gaze_away');
+        playBeep();
+      }
+    } else {
+      gazeAwayStartRef.current = null;
+      gazeEventFiredRef.current = false;
     }
     if (flags.afk && !prev.afk) {
       statsRef.current.afkCount++;
@@ -743,7 +758,7 @@ function SessionContent() {
               </button>
               <motion.div
                 animate={{ opacity: showCamera ? 1 : 0, scale: showCamera ? 1 : 0.8 }}
-                className="w-40 h-[120px] rounded-lg overflow-hidden bg-black/80 border border-border shadow-xl"
+                className="w-64 h-48 rounded-lg overflow-hidden bg-black/80 border border-border shadow-xl"
               >
                 <CameraPreview stream={mediaStreamRef.current} />
               </motion.div>
