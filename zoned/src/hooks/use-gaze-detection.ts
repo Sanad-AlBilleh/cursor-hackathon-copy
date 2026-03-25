@@ -28,7 +28,7 @@ const GAZE_Y_THRESHOLD = 0.5;
 const DIRECTION_THRESHOLD = 0.3;
 const CALIBRATION_SAMPLES = 20;
 const FRAME_INTERVAL_MS = 100;
-const NO_FACE_AFK_MS = 3_000;
+const NO_FACE_AFK_MS = 15_000;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {

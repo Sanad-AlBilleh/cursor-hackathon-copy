@@ -234,18 +234,12 @@ function SessionContent() {
   useEffect(() => {
     if (phase !== 'active') return;
 
-    const isAfk = (() => {
-      if (gazeState.noFaceDetected) {
-        if (!noFaceStartRef.current) noFaceStartRef.current = Date.now();
-        return Date.now() - noFaceStartRef.current >= 3_000;
-      }
-      noFaceStartRef.current = null;
-      return false;
-    })();
+    const afkTriggered = gazeState.noFaceDetected && gazeAwayStartRef.current != null &&
+      Date.now() - gazeAwayStartRef.current >= 60_000;
 
     const flags = {
-      gazeAway: gazeState.isLookingAway && !gazeState.noFaceDetected,
-      afk: isAfk,
+      gazeAway: gazeState.isLookingAway || gazeState.noFaceDetected,
+      afk: afkTriggered,
       tabAway: tabState.isTabAway,
       idle: idleState.isIdle,
       noisy: audioState.isNoisy,
@@ -253,7 +247,7 @@ function SessionContent() {
 
     const prev = prevFlags.current;
 
-    const gazeGraceMs = (profile?.gaze_threshold_seconds ?? 20) * 1000;
+    const gazeGraceMs = (profile?.gaze_threshold_seconds ?? 5) * 1000;
     if (flags.gazeAway) {
       if (!gazeAwayStartRef.current) {
         gazeAwayStartRef.current = Date.now();
