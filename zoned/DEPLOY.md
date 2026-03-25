@@ -1,8 +1,10 @@
 # Deploy Zoned to Vercel
 
+**Canonical repo:** [github.com/habo212/Cursor-Hackathon](https://github.com/habo212/Cursor-Hackathon) — the app lives in the **`zoned/`** folder. On Vercel, set **Root Directory** to `zoned`.
+
 ## 1. Put the code on GitHub
 
-Pick **one** approach.
+Pick **one** approach (this project uses **B**).
 
 ### A — Deploy only `zoned/` as its own repo (simplest for Vercel)
 
