@@ -299,8 +299,9 @@ function SessionContent() {
 
     prevFlags.current = flags;
 
+    const gazeActuallyDistracted = gazeEventFiredRef.current;
     const isNowDistracted =
-      flags.gazeAway || flags.afk || flags.tabAway || flags.idle || flags.noisy;
+      gazeActuallyDistracted || flags.afk || flags.tabAway || flags.idle || flags.noisy;
 
     if (isNowDistracted && !isDistractedRef.current) {
       distractionStartRef.current = Date.now();

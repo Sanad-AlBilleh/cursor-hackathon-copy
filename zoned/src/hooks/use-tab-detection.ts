@@ -1,14 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface TabDetectionState {
   isTabAway: boolean;
   tabAwayDuration: number;
   tabSwitchCount: number;
 }
-
-const TAB_AWAY_THRESHOLD_MS = 10_000;
 
 export function useTabDetection(enabled: boolean) {
   const [state, setState] = useState<TabDetectionState>({
@@ -19,48 +17,67 @@ export function useTabDetection(enabled: boolean) {
 
   const hiddenAtRef = useRef<number | null>(null);
   const switchCountRef = useRef(0);
-
-  const handleVisibility = useCallback(() => {
-    if (!enabled) return;
-
-    if (document.hidden) {
-      hiddenAtRef.current = Date.now();
-      switchCountRef.current += 1;
-      setState((prev) => ({
-        ...prev,
-        tabSwitchCount: switchCountRef.current,
-      }));
-    } else {
-      if (hiddenAtRef.current) {
-        const duration = Date.now() - hiddenAtRef.current;
-        const exceeded = duration >= TAB_AWAY_THRESHOLD_MS;
-        setState((prev) => ({
-          ...prev,
-          isTabAway: exceeded,
-          tabAwayDuration: exceeded ? Math.round(duration / 1000) : prev.tabAwayDuration,
-        }));
-        hiddenAtRef.current = null;
-
-        if (exceeded) {
-          setTimeout(() => {
-            setState((prev) => ({ ...prev, isTabAway: false }));
-          }, 2000);
-        }
-      }
-    }
-  }, [enabled]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!enabled) {
       setState({ isTabAway: false, tabAwayDuration: 0, tabSwitchCount: 0 });
       hiddenAtRef.current = null;
       switchCountRef.current = 0;
+      if (timerRef.current) clearInterval(timerRef.current);
       return;
     }
 
+    function handleVisibility() {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+        switchCountRef.current += 1;
+
+        setState((prev) => ({
+          ...prev,
+          isTabAway: true,
+          tabSwitchCount: switchCountRef.current,
+        }));
+
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+          if (hiddenAtRef.current) {
+            const dur = Math.round((Date.now() - hiddenAtRef.current) / 1000);
+            setState((prev) => ({
+              ...prev,
+              isTabAway: true,
+              tabAwayDuration: dur,
+            }));
+          }
+        }, 1000);
+      } else {
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = null;
+
+        const finalDuration = hiddenAtRef.current
+          ? Math.round((Date.now() - hiddenAtRef.current) / 1000)
+          : 0;
+        hiddenAtRef.current = null;
+
+        setState((prev) => ({
+          ...prev,
+          isTabAway: false,
+          tabAwayDuration: finalDuration,
+        }));
+      }
+    }
+
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [enabled, handleVisibility]);
+
+    if (document.hidden) {
+      handleVisibility();
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [enabled]);
 
   return state;
 }

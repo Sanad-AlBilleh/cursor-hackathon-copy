@@ -11,13 +11,13 @@ export interface AudioDetectionState {
 }
 
 const SENSITIVITY_THRESHOLDS: Record<NoiseSensitivity, number> = {
-  low: 220,
-  medium: 190,
-  high: 150,
+  low: 70,
+  medium: 45,
+  high: 25,
 };
 
 const DISPLAY_INTERVAL_MS = 500;
-const NOISE_FLAG_DURATION_S = 30;
+const NOISE_FLAG_DURATION_S = 5;
 
 function classifyNoise(
   dataArray: Uint8Array,
@@ -67,7 +67,6 @@ export function useAudioDetection(
   const analyserRef = useRef<AnalyserNode | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const noiseDurationRef = useRef(0);
-  const lastAboveRef = useRef(false);
 
   useEffect(() => {
     if (!stream || !enabled) {
@@ -78,7 +77,6 @@ export function useAudioDetection(
       ctxRef.current = null;
       analyserRef.current = null;
       noiseDurationRef.current = 0;
-      lastAboveRef.current = false;
       setState({
         isNoisy: false,
         averageDb: 0,
@@ -93,7 +91,7 @@ export function useAudioDetection(
 
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.3;
+    analyser.smoothingTimeConstant = 0.4;
     analyserRef.current = analyser;
 
     try {
@@ -123,7 +121,6 @@ export function useAudioDetection(
 
       if (aboveThreshold) {
         noiseDurationRef.current += DISPLAY_INTERVAL_MS / 1000;
-        lastAboveRef.current = true;
 
         const noiseType = classifyNoise(
           dataArray,
@@ -139,15 +136,13 @@ export function useAudioDetection(
           continuousNoiseDuration: noiseDurationRef.current,
         });
       } else {
-        if (lastAboveRef.current) {
-          noiseDurationRef.current = 0;
-          lastAboveRef.current = false;
-        }
+        noiseDurationRef.current = Math.max(0, noiseDurationRef.current - DISPLAY_INTERVAL_MS / 1000);
         setState((prev) => ({
           ...prev,
           isNoisy: false,
           averageDb: Math.round(avg),
-          continuousNoiseDuration: 0,
+          detectedType: null,
+          continuousNoiseDuration: noiseDurationRef.current,
         }));
       }
     }, DISPLAY_INTERVAL_MS);
