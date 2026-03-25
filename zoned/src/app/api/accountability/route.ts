@@ -12,7 +12,7 @@ const twilioClient = twilio(
 
 export async function POST(request: NextRequest) {
   try {
-    const { session_id, user_id } = await request.json();
+    const { session_id, user_id, trigger_reason } = await request.json();
 
     const supabase = await createClient();
 
@@ -87,7 +87,7 @@ Write 2-3 sentences. Address ${profile.accountability_partner_name ?? 'their par
     await supabase.from('accountability_triggers').insert({
       session_id,
       user_id,
-      trigger_reason: '5x_gaze_away',
+      trigger_reason: trigger_reason ?? '5x_gaze_away',
       message_sent: message,
       recipient_phone: profile.accountability_partner_phone,
       twilio_message_sid: twilioMessage.sid,

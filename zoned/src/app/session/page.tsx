@@ -355,8 +355,11 @@ function SessionContent() {
     const afkTriggered = gazeState.noFaceDetected && gazeAwayStartRef.current != null &&
       Date.now() - gazeAwayStartRef.current >= 60_000;
 
+    // Only count gaze as "away" when calibrated. During calibration
+    // (initial or after AFK return) we can't judge gaze yet — don't
+    // carry stale isLookingAway=true from the AFK period.
     const flags = {
-      gazeAway: gazeState.isLookingAway || gazeState.noFaceDetected,
+      gazeAway: gazeState.noFaceDetected || (gazeState.isCalibrated && gazeState.isLookingAway),
       afk: afkTriggered,
       tabAway: tabState.isDistractedByTab,
       idle: idleState.isIdle,
@@ -724,8 +727,8 @@ function SessionContent() {
   // Derived state
   // ------------------------------------------------------------------
   const isDistracted =
-    gazeState.isLookingAway ||
     gazeState.noFaceDetected ||
+    (gazeState.isCalibrated && gazeState.isLookingAway) ||
     tabState.isDistractedByTab ||
     idleState.isIdle ||
     audioState.isNoisy;
@@ -736,7 +739,9 @@ function SessionContent() {
       const cat = tabState.distractingCategory ? ` · ${tabState.distractingCategory}` : '';
       return `${tabState.distractingSite}${cat}`;
     }
-    if (gazeState.isLookingAway) return `Looking ${gazeState.gazeDirection}`;
+    if (gazeState.trackingConfidence === 'low' && gazeState.isCalibrated && gazeState.isLookingAway)
+      return 'Eyes not visible';
+    if (gazeState.isCalibrated && gazeState.isLookingAway) return `Looking ${gazeState.gazeDirection}`;
     if (idleState.isIdle) return 'Idle — No activity';
     if (audioState.isNoisy) return `Noise: ${audioState.detectedType ?? 'detected'}`;
     return null;
@@ -954,7 +959,11 @@ function SessionContent() {
                 )}
                 {!gazeState.isCalibrated && !gazeState.isLoading && phase === 'active' && (
                   <Badge variant="secondary" className="text-xs">
-                    Calibrating…
+                    {gazeState.trackingPhase === 'reacquiring'
+                      ? 'Recentering…'
+                      : `Calibrating${gazeState.debug?.calibrationProgress != null
+                          ? ` (${Math.round(gazeState.debug.calibrationProgress * 100)}%)`
+                          : ''}…`}
                   </Badge>
                 )}
               </div>
@@ -1169,7 +1178,7 @@ function SessionContent() {
                         : ''}
                     </p>
                     <p className="text-red-200 text-sm">
-                      Look at your screen to dismiss this alert
+                      Face the camera to dismiss this alert
                     </p>
                   </motion.div>
                 </motion.div>

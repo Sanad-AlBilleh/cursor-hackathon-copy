@@ -15,7 +15,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Stack
 
-- **Frontend:** Next.js 14 (App Router) + Tailwind CSS + shadcn/ui + Framer Motion
+- **Frontend:** Next.js 16 (App Router, Turbopack) + Tailwind CSS + shadcn/ui + Framer Motion
 - **Gaze Detection:** MediaPipe Face Mesh (CDN, runs in browser)
 - **Audio Analysis:** Web Audio API
 - **Tab Monitoring:** Page Visibility API + Idle Event Listeners
@@ -44,6 +44,18 @@ Open [http://localhost:3000](http://localhost:3000).
 - **Accountability partner:** WhatsApp shame messages via Twilio when focus drops
 - **Analytics dashboard:** Focus scores, weekly trends, streaks, brain mascot health
 - **Settings:** Customize all detection thresholds, coach persona, accountability partner
+
+## Demo (60s)
+
+1. Sign up with any email/password → complete onboarding (pick a coach persona, type a task)
+2. Go to `/session` → type a task like "Write pitch deck" → optionally set 25-min timer → **Start Session**
+3. Allow camera + microphone → you'll see the green **Focused** pill
+4. **Look away** from screen → red **Distracted** pill appears, gaze alarm escalates (gentle → strong → full-screen takeover)
+5. **Look back** → alarm clears, focus resumes
+6. **End session** → see your focus score, AI coach debrief
+7. **Dashboard** → weekly chart, brain mascot, streak tracking
+
+Optional: install the Chrome extension (`extension/` folder → Load unpacked) for tab distraction detection. Configure Twilio env vars for live WhatsApp accountability messages.
 
 ## Deploy to Vercel
 
