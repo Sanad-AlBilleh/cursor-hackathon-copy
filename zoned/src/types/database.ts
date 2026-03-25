@@ -3,7 +3,7 @@ export type CoachPersona = 'drill_sergeant' | 'hype_coach' | 'therapist' | 'frie
 export type NoiseSensitivity = 'low' | 'medium' | 'high';
 export type SessionStatus = 'active' | 'ended';
 export type DistractionEventType = 'gaze_away' | 'tab_switch' | 'static_page' | 'afk' | 'noise';
-export type NoiseDetectedType = 'crowd' | 'music' | 'tv' | 'general_noise';
+export type NoiseDetectedType = 'crowd' | 'music' | 'tv' | 'general_noise' | 'conversation';
 export type TriggerReason = '30min_afk' | '5x_gaze_away';
 
 export interface Profile {

@@ -17,6 +17,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   PictureInPicture2,
+  Timer,
+  Coffee,
+  X,
+  MapPin,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -28,6 +32,7 @@ import { useAudioDetection } from '@/hooks/use-audio-detection';
 import { useTabDetection } from '@/hooks/use-tab-detection';
 import { useIdleDetection } from '@/hooks/use-idle-detection';
 import { useSessionTimer } from '@/hooks/use-session-timer';
+import { useFocusTimer } from '@/hooks/use-focus-timer';
 import { usePictureInPicture } from '@/hooks/use-picture-in-picture';
 import type {
   Profile,
@@ -78,6 +83,82 @@ function playBeep() {
   } catch {}
 }
 
+function playCompletionSound() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.15);
+      gain.gain.setValueAtTime(0.2, now + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.4);
+      osc.start(now + i * 0.15);
+      osc.stop(now + i * 0.15 + 0.4);
+    });
+    setTimeout(() => ctx.close(), 2000);
+  } catch {}
+}
+
+function playGentleChime() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.5);
+    setTimeout(() => ctx.close(), 600);
+  } catch {}
+}
+
+function playStrongAlarm() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [520, 660].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.2);
+      gain.gain.setValueAtTime(0.3, now + i * 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.2 + 0.25);
+      osc.start(now + i * 0.2);
+      osc.stop(now + i * 0.2 + 0.25);
+    });
+    setTimeout(() => ctx.close(), 1000);
+  } catch {}
+}
+
+function playCriticalAlarm() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    setTimeout(() => ctx.close(), 500);
+  } catch {}
+}
+
+const TIMER_PRESETS = [15, 25, 45, 60];
+
 function computeFocusScore(stats: SessionStats): number {
   const raw =
     100 -
@@ -96,7 +177,7 @@ function SessionContent() {
   const supabase = createClient();
 
   const [phase, setPhase] = useState<SessionPhase>('idle');
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [_sessionId, setSessionId] = useState<string | null>(null);
   const [taskDescription, setTaskDescription] = useState(
     searchParams.get('task') ?? '',
   );
@@ -108,6 +189,12 @@ function SessionContent() {
   const [isStarting, setIsStarting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [distractionElapsed, setDistractionElapsed] = useState(0);
+  const [targetMinutes, setTargetMinutes] = useState<number | null>(null);
+  const [customMinutes, setCustomMinutes] = useState('');
+  const [showCustomTimer, setShowCustomTimer] = useState(false);
+  const [gazeAlarmLevel, setGazeAlarmLevel] = useState(0);
+  const [envPopup, setEnvPopup] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -117,7 +204,6 @@ function SessionContent() {
   const lastNudgeRef = useRef(0);
   const isDistractedRef = useRef(false);
   const distractionStartRef = useRef<number | null>(null);
-  const noFaceStartRef = useRef<number | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
   const prevFlags = useRef({
@@ -131,6 +217,8 @@ function SessionContent() {
   const gazeEventFiredRef = useRef(false);
   const gazeReturnedAtRef = useRef<number | null>(null);
   const GAZE_FORGIVENESS_MS = 1500;
+  const lastGazeAlarmLevelRef = useRef(0);
+  const envPopupCooldownRef = useRef(0);
 
   const gazeState = useGazeDetection(videoRef, phase === 'active');
   const audioState = useAudioDetection(
@@ -141,6 +229,11 @@ function SessionContent() {
   const tabState = useTabDetection(phase === 'active');
   const idleState = useIdleDetection(phase === 'active');
   const timer = useSessionTimer(phase === 'active');
+  const focusTimer = useFocusTimer(
+    targetMinutes,
+    phase === 'active',
+    isDistractedRef.current,
+  );
   const pip = usePictureInPicture();
 
   // ------------------------------------------------------------------
@@ -233,6 +326,25 @@ function SessionContent() {
     const t = setTimeout(() => setCoachMessage(null), 6000);
     return () => clearTimeout(t);
   }, [coachMessage]);
+
+  // ------------------------------------------------------------------
+  // Environment change popup (conversation/noise with cooldown)
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (phase !== 'active' || focusTimer.isOnBreak) return;
+
+    const suggestion = audioState.environmentSuggestion;
+    if (!suggestion) return;
+
+    const now = Date.now();
+    if (now - envPopupCooldownRef.current < 5 * 60 * 1000) return;
+
+    envPopupCooldownRef.current = now;
+    setEnvPopup(suggestion);
+
+    const t = setTimeout(() => setEnvPopup(null), 10_000);
+    return () => clearTimeout(t);
+  }, [audioState.environmentSuggestion, phase, focusTimer.isOnBreak]);
 
   // ------------------------------------------------------------------
   // Detect distraction transitions
@@ -333,6 +445,54 @@ function SessionContent() {
   ]);
 
   // ------------------------------------------------------------------
+  // Gaze-away alarm escalation (30s / 45s / 60s)
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (phase !== 'active') return;
+    if (focusTimer.isOnBreak) {
+      setGazeAlarmLevel(0);
+      return;
+    }
+
+    const id = setInterval(() => {
+      const awayStart = gazeAwayStartRef.current;
+      if (!awayStart) {
+        if (gazeAlarmLevel !== 0) setGazeAlarmLevel(0);
+        return;
+      }
+
+      const returnedAt = gazeReturnedAtRef.current;
+      if (returnedAt && Date.now() - returnedAt >= GAZE_FORGIVENESS_MS) {
+        if (gazeAlarmLevel !== 0) setGazeAlarmLevel(0);
+        return;
+      }
+
+      const awaySeconds = (Date.now() - awayStart) / 1000;
+      let level = 0;
+      if (awaySeconds >= 60) level = 3;
+      else if (awaySeconds >= 45) level = 2;
+      else if (awaySeconds >= 30) level = 1;
+
+      if (level !== lastGazeAlarmLevelRef.current) {
+        lastGazeAlarmLevelRef.current = level;
+        if (level === 1) playGentleChime();
+        else if (level === 2) playStrongAlarm();
+        else if (level === 3) playCriticalAlarm();
+      }
+      if (level === 3 && awaySeconds % 1 < 0.5) {
+        playCriticalAlarm();
+      }
+
+      setGazeAlarmLevel(level);
+    }, 1000);
+
+    return () => {
+      clearInterval(id);
+      lastGazeAlarmLevelRef.current = 0;
+    };
+  }, [phase, focusTimer.isOnBreak, gazeAlarmLevel]);
+
+  // ------------------------------------------------------------------
   // 1-second focus/distraction time tracker
   // ------------------------------------------------------------------
   useEffect(() => {
@@ -340,9 +500,12 @@ function SessionContent() {
     const id = setInterval(() => {
       if (isDistractedRef.current) {
         statsRef.current.distractionSeconds++;
+        const start = distractionStartRef.current;
+        setDistractionElapsed(start ? Math.round((Date.now() - start) / 1000) : 0);
       } else {
         statsRef.current.focusSeconds++;
         statsRef.current.currentFocusStreak++;
+        setDistractionElapsed(0);
       }
     }, 1000);
     return () => clearInterval(id);
@@ -392,6 +555,31 @@ function SessionContent() {
       });
     } catch {}
   }
+
+  // ------------------------------------------------------------------
+  // Auto-end session when focus timer completes
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (focusTimer.isCompleted && phase === 'active') {
+      playCompletionSound();
+      const t = setTimeout(() => endSession(), 3000);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTimer.isCompleted, phase]);
+
+  // ------------------------------------------------------------------
+  // Safety net: notify extension on page unload during active session
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    function handleBeforeUnload() {
+      if (phase === 'active') {
+        window.postMessage({ type: 'ZONED_SESSION_END' }, window.location.origin);
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [phase]);
 
   // ------------------------------------------------------------------
   // Redirect after session ends
@@ -453,6 +641,7 @@ function SessionContent() {
       isDistractedRef.current = false;
       prevFlags.current = { gazeAway: false, afk: false, tabAway: false, idle: false, noisy: false };
       setPhase('active');
+      window.postMessage({ type: 'ZONED_SESSION_START' }, window.location.origin);
     } catch {
       setPermissionError('Could not start session. Please try again.');
     } finally {
@@ -521,6 +710,7 @@ function SessionContent() {
     }
 
     pip.close();
+    window.postMessage({ type: 'ZONED_SESSION_END' }, window.location.origin);
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -617,6 +807,81 @@ function SessionContent() {
                     </motion.div>
                   )}
 
+                  {/* Focus duration selection */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none flex items-center gap-2">
+                      <Timer className="w-4 h-4" />
+                      Focus Duration
+                      <span className="text-muted-foreground font-normal">(optional)</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {TIMER_PRESETS.map((mins) => (
+                        <button
+                          key={mins}
+                          type="button"
+                          onClick={() => {
+                            setTargetMinutes(targetMinutes === mins ? null : mins);
+                            setShowCustomTimer(false);
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                            targetMinutes === mins
+                              ? 'bg-emerald-500 text-white'
+                              : 'bg-muted text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {mins} min
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCustomTimer(!showCustomTimer);
+                          if (!showCustomTimer) {
+                            setTargetMinutes(null);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                          showCustomTimer
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-muted text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Custom
+                      </button>
+                      {targetMinutes !== null && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetMinutes(null);
+                            setShowCustomTimer(false);
+                            setCustomMinutes('');
+                          }}
+                          className="px-3 py-1.5 rounded-full text-sm font-medium text-muted-foreground hover:text-foreground"
+                        >
+                          No timer
+                        </button>
+                      )}
+                    </div>
+                    {showCustomTimer && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={480}
+                          value={customMinutes}
+                          onChange={(e) => {
+                            setCustomMinutes(e.target.value);
+                            const v = parseInt(e.target.value, 10);
+                            if (v > 0 && v <= 480) setTargetMinutes(v);
+                          }}
+                          placeholder="Minutes"
+                          className="w-24 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                        />
+                        <span className="text-sm text-muted-foreground">minutes</span>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <Camera className="w-4 h-4" />
                     <span>Camera + mic access required</span>
@@ -676,6 +941,11 @@ function SessionContent() {
                 <span className="text-sm font-medium">
                   {isDistracted ? 'Distracted' : 'Focused'}
                 </span>
+                {isDistracted && distractionElapsed > 0 && (
+                  <span className="text-xs font-mono text-red-400 tabular-nums">
+                    {distractionElapsed}s
+                  </span>
+                )}
                 {gazeState.isLoading && (
                   <Badge variant="secondary" className="text-xs">
                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -689,11 +959,66 @@ function SessionContent() {
                 )}
               </div>
 
-              <div className="font-mono text-2xl tabular-nums tracking-wider">
-                {timer.formatted}
+              <div className="flex items-center gap-2">
+                {focusTimer.hasTimer ? (
+                  <div className="text-center">
+                    <div
+                      className={`font-mono text-2xl tabular-nums tracking-wider ${
+                        focusTimer.isCompleted
+                          ? 'text-emerald-400'
+                          : focusTimer.isPaused
+                            ? 'text-amber-400 animate-pulse'
+                            : focusTimer.remainingSeconds <= 300
+                              ? 'text-red-400'
+                              : ''
+                      }`}
+                    >
+                      {focusTimer.formatted}
+                    </div>
+                    {focusTimer.isPaused && (
+                      <span className="text-xs text-amber-400">paused</span>
+                    )}
+                    {focusTimer.isOnBreak && (
+                      <span className="text-xs text-blue-400">break {focusTimer.breakFormatted}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="font-mono text-2xl tabular-nums tracking-wider">
+                    {timer.formatted}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Break button */}
+                {phase === 'active' && !focusTimer.isCompleted && (
+                  focusTimer.isOnBreak ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={focusTimer.endBreak}
+                      className="border-blue-500/50 text-blue-400"
+                    >
+                      <Coffee className="w-4 h-4 mr-1" />
+                      End Break ({focusTimer.breakFormatted})
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={focusTimer.startBreak}
+                      disabled={!focusTimer.canTakeBreak}
+                      title={
+                        focusTimer.canTakeBreak
+                          ? `Take a 5-minute break (${2 - focusTimer.breaksUsed} remaining this hour)`
+                          : 'No breaks remaining this hour'
+                      }
+                    >
+                      <Coffee className="w-4 h-4 mr-1" />
+                      Break ({2 - focusTimer.breaksUsed})
+                    </Button>
+                  )
+                )}
                 {pip.isSupported && !pip.isActive && (
                   <Button
                     variant="outline"
@@ -781,6 +1106,131 @@ function SessionContent() {
                 )}
               </AnimatePresence>
             </main>
+
+            {/* Gaze alarm overlays */}
+            <AnimatePresence>
+              {gazeAlarmLevel === 1 && (
+                <motion.div
+                  key="gaze-alarm-1"
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="fixed top-0 left-0 right-0 z-40 h-12 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-amber-500 shadow-lg"
+                >
+                  <Eye className="w-4 h-4 text-white" />
+                  <span className="text-white text-sm font-medium">
+                    Please refocus on your screen
+                  </span>
+                </motion.div>
+              )}
+              {gazeAlarmLevel === 2 && (
+                <motion.div
+                  key="gaze-alarm-2"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-40 pointer-events-none"
+                >
+                  <div className="absolute inset-0 bg-amber-900/20" />
+                  <motion.div
+                    animate={{ opacity: [0.8, 1, 0.8] }}
+                    transition={{ repeat: Infinity, duration: 1.5 }}
+                    className="absolute top-0 left-0 right-0 h-14 flex items-center justify-center gap-3 bg-gradient-to-r from-orange-600 to-red-500 shadow-xl"
+                  >
+                    <EyeOff className="w-5 h-5 text-white" />
+                    <span className="text-white text-base font-bold tracking-wide">
+                      You&#39;re looking away! Focus!
+                    </span>
+                    <EyeOff className="w-5 h-5 text-white" />
+                  </motion.div>
+                </motion.div>
+              )}
+              {gazeAlarmLevel === 3 && (
+                <motion.div
+                  key="gaze-alarm-3"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+                  style={{ background: 'rgba(127, 29, 29, 0.85)', backdropFilter: 'blur(4px)' }}
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ repeat: Infinity, duration: 0.8 }}
+                    className="text-center space-y-4"
+                  >
+                    <EyeOff className="w-16 h-16 text-red-300 mx-auto" />
+                    <h2 className="text-3xl font-extrabold text-white uppercase tracking-widest">
+                      GET BACK TO FOCUS
+                    </h2>
+                    <p className="text-6xl font-bold text-red-300 tabular-nums font-mono">
+                      {gazeAwayStartRef.current
+                        ? `${Math.round((Date.now() - gazeAwayStartRef.current) / 1000)}s`
+                        : ''}
+                    </p>
+                    <p className="text-red-200 text-sm">
+                      Look at your screen to dismiss this alert
+                    </p>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Break overlay */}
+            <AnimatePresence>
+              {focusTimer.isOnBreak && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-30 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+                >
+                  <div className="text-center space-y-4">
+                    <Coffee className="w-12 h-12 text-blue-400 mx-auto" />
+                    <h2 className="text-xl font-bold">Taking a Break</h2>
+                    <p className="font-mono text-4xl tabular-nums text-blue-400">
+                      {focusTimer.breakFormatted}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Relax, stretch, grab some water. Your timer is paused.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={focusTimer.endBreak}
+                    >
+                      End Break Early
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Timer completion overlay */}
+            <AnimatePresence>
+              {focusTimer.isCompleted && phase === 'active' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-40 flex items-center justify-center bg-background/90 backdrop-blur-sm"
+                >
+                  <div className="text-center space-y-4">
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 200, damping: 14 }}
+                    >
+                      <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
+                    </motion.div>
+                    <h2 className="text-2xl font-bold">Focus Goal Reached!</h2>
+                    <p className="text-muted-foreground text-sm">
+                      Great work! Ending session...
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Camera preview toggle */}
             <div className="fixed bottom-4 right-4 flex flex-col items-end gap-2 z-20">
@@ -910,9 +1360,42 @@ function SessionContent() {
             stream={mediaStreamRef.current}
             onEnd={endSession}
             isEnding={isEnding}
+            focusTimer={focusTimer}
+            gazeAlarmLevel={gazeAlarmLevel}
           />,
           pip.pipWindow.document.getElementById('pip-root')!,
         )}
+
+      {/* =================== Environment change popup =================== */}
+      <AnimatePresence>
+        {envPopup && phase === 'active' && (
+          <motion.div
+            initial={{ opacity: 0, y: 40, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 40, x: '-50%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+            className="fixed bottom-6 left-1/2 z-40 max-w-md w-full"
+          >
+            <Card className="border-blue-500/30 shadow-lg shadow-blue-500/10">
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-300 mb-1">Change Environment</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{envPopup}</p>
+                </div>
+                <button
+                  onClick={() => setEnvPopup(null)}
+                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* =================== Coach overlay =================== */}
       <AnimatePresence>
@@ -949,6 +1432,8 @@ function PipMonitor({
   stream,
   onEnd,
   isEnding,
+  focusTimer,
+  gazeAlarmLevel,
 }: {
   timer: string;
   isDistracted: boolean;
@@ -959,6 +1444,8 @@ function PipMonitor({
   stream: MediaStream | null;
   onEnd: () => void;
   isEnding: boolean;
+  focusTimer: ReturnType<typeof import('@/hooks/use-focus-timer').useFocusTimer>;
+  gazeAlarmLevel: number;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -968,6 +1455,9 @@ function PipMonitor({
       videoRef.current.play().catch(() => {});
     }
   }, [stream]);
+
+  const alarmBorderColor =
+    gazeAlarmLevel === 3 ? '#dc2626' : gazeAlarmLevel === 2 ? '#ea580c' : gazeAlarmLevel === 1 ? '#d97706' : 'transparent';
 
   return (
     <div
@@ -981,6 +1471,8 @@ function PipMonitor({
         padding: '12px',
         gap: '10px',
         boxSizing: 'border-box',
+        borderTop: gazeAlarmLevel > 0 ? `3px solid ${alarmBorderColor}` : 'none',
+        transition: 'border-color 0.3s',
       }}
     >
       {/* Status + timer */}
@@ -991,21 +1483,49 @@ function PipMonitor({
               width: 10,
               height: 10,
               borderRadius: '50%',
-              background: isDistracted ? '#ef4444' : '#22c55e',
+              background: focusTimer.isOnBreak ? '#3b82f6' : isDistracted ? '#ef4444' : '#22c55e',
               transition: 'background 0.3s',
             }}
           />
           <span style={{ fontSize: '13px', fontWeight: 500 }}>
-            {isDistracted ? 'Distracted' : 'Focused'}
+            {focusTimer.isOnBreak ? 'Break' : isDistracted ? 'Distracted' : 'Focused'}
           </span>
         </div>
-        <span style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 700, letterSpacing: '0.05em' }}>
-          {timer}
-        </span>
+        <div style={{ textAlign: 'right' }}>
+          {focusTimer.hasTimer ? (
+            <>
+              <div
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: '18px',
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  color: focusTimer.isPaused
+                    ? '#f59e0b'
+                    : focusTimer.remainingSeconds <= 300
+                      ? '#ef4444'
+                      : '#fafafa',
+                }}
+              >
+                {focusTimer.formatted}
+              </div>
+              {focusTimer.isPaused && (
+                <div style={{ fontSize: '10px', color: '#f59e0b' }}>paused</div>
+              )}
+              {focusTimer.isOnBreak && (
+                <div style={{ fontSize: '10px', color: '#3b82f6' }}>break {focusTimer.breakFormatted}</div>
+              )}
+            </>
+          ) : (
+            <span style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 700, letterSpacing: '0.05em' }}>
+              {timer}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Distraction label */}
-      {distractionLabel && (
+      {distractionLabel && !focusTimer.isOnBreak && (
         <div
           style={{
             background: 'rgba(239,68,68,0.15)',
@@ -1069,24 +1589,64 @@ function PipMonitor({
         />
       </div>
 
-      {/* End button */}
-      <button
-        onClick={onEnd}
-        disabled={isEnding}
-        style={{
-          background: '#dc2626',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          padding: '8px 0',
-          fontSize: '13px',
-          fontWeight: 600,
-          cursor: 'pointer',
-          opacity: isEnding ? 0.6 : 1,
-        }}
-      >
-        {isEnding ? 'Ending...' : 'End Session'}
-      </button>
+      {/* Break + End buttons */}
+      <div style={{ display: 'flex', gap: '6px' }}>
+        {focusTimer.isOnBreak ? (
+          <button
+            onClick={focusTimer.endBreak}
+            style={{
+              flex: 1,
+              background: '#2563eb',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '8px 0',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            End Break ({focusTimer.breakFormatted})
+          </button>
+        ) : (
+          <button
+            onClick={focusTimer.startBreak}
+            disabled={!focusTimer.canTakeBreak}
+            style={{
+              flex: 1,
+              background: '#27272a',
+              color: focusTimer.canTakeBreak ? '#fafafa' : '#52525b',
+              border: '1px solid #3f3f46',
+              borderRadius: '8px',
+              padding: '8px 0',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: focusTimer.canTakeBreak ? 'pointer' : 'not-allowed',
+              opacity: focusTimer.canTakeBreak ? 1 : 0.5,
+            }}
+          >
+            Break ({2 - focusTimer.breaksUsed})
+          </button>
+        )}
+        <button
+          onClick={onEnd}
+          disabled={isEnding}
+          style={{
+            flex: 1,
+            background: '#dc2626',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '8px 0',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            opacity: isEnding ? 0.6 : 1,
+          }}
+        >
+          {isEnding ? 'Ending...' : 'End'}
+        </button>
+      </div>
     </div>
   );
 }
