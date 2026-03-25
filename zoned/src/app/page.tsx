@@ -26,13 +26,14 @@ export default function LoginPage() {
       if (isSignUp) {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        toast.success('Account created! Check your email to confirm, or log in now.');
+        toast.success('Account created!');
+        router.push('/onboarding');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success('Welcome back!');
+        router.push('/dashboard');
       }
-      router.refresh();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
       toast.error(message);

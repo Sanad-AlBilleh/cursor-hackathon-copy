@@ -45,21 +45,13 @@ export async function updateSession(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    if (profile && !profile.onboarding_completed && pathname !== '/') {
+    if (profile && !profile.onboarding_completed) {
       const url = request.nextUrl.clone();
       url.pathname = '/onboarding';
       return NextResponse.redirect(url);
     }
-  }
 
-  if (user && pathname === '/') {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('onboarding_completed')
-      .eq('id', user.id)
-      .single();
-
-    if (profile?.onboarding_completed) {
+    if (profile?.onboarding_completed && pathname === '/') {
       const url = request.nextUrl.clone();
       url.pathname = '/dashboard';
       return NextResponse.redirect(url);
