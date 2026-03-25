@@ -8,13 +8,13 @@ M2 — Focus features + polish
 
 ## In progress
 
-- none
+- Live QA: test gaze v2, timer, alarm escalation, noise, break system with real webcam
 
 ## Next 3 steps
 
-1. Manual QA: load extension, start session, test timer + gaze alarm + noise popup + break system
-2. Ship demo: seed data, polish happy path, update demo.md
-3. Judge pass: review for score-killers, fix top issues
+1. Judge pass: review for score-killers, fix top issues
+2. Final polish: copy, spacing, CTA clarity
+3. Record backup demo video (60s screen recording) in case live demo fails
 
 ## Blocked / waiting
 
@@ -22,6 +22,8 @@ M2 — Focus features + polish
 
 ## Done recently
 
+- **Gaze detection v2:** frame quality scoring (EAR + head angle), symmetric vertical away detection, AFK recalibration, rolling head baseline via EMA, adaptive smoothing, head-only away override, low-quality grace period, debug instrumentation
+- **Ship demo pass:** filled in spec.md, demo.md with real content; added 60s demo script to README; fixed README Next.js version (14 → 16); fixed accountability API hardcoded trigger_reason bug; added error.tsx and loading.tsx for root + dashboard routes; added calibration progress percentage to session UI
 - Fixed extension session gating: extension now only triggers during active sessions (not when any Zoned tab is open)
 - Added focus countdown timer with preset/custom durations and auto-pause when distracted
 - Added break system: 5-minute breaks, max 2 per hour, with break overlay and PiP support
