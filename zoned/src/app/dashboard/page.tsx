@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import type { Session, Profile } from '@/types/database';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button-variants';
+import { cn } from '@/lib/utils';
 import { LastSessionCard } from '@/components/dashboard/last-session-card';
 import { WeeklyChart, type WeeklyDataPoint } from '@/components/dashboard/weekly-chart';
 import { AllTimeStats } from '@/components/dashboard/all-time-stats';
@@ -141,9 +142,12 @@ function Header() {
           >
             Settings
           </Link>
-          <Button size="sm" render={<Link href="/session" />}>
+          <Link
+            href="/session"
+            className={cn(buttonVariants({ size: 'sm' }))}
+          >
             Start New Session
-          </Button>
+          </Link>
         </nav>
       </div>
     </header>

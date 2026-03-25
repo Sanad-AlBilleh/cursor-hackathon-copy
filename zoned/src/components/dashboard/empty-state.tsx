@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button-variants';
+import { cn } from '@/lib/utils';
 
 export function EmptyState() {
   return (
@@ -10,9 +11,12 @@ export function EmptyState() {
         No sessions yet. Start your first focus session and see how your brain
         responds to deep work!
       </p>
-      <Button size="lg" render={<Link href="/session" />}>
+      <Link
+        href="/session"
+        className={cn(buttonVariants({ size: 'lg' }))}
+      >
         Start Your First Session
-      </Button>
+      </Link>
     </div>
   );
 }

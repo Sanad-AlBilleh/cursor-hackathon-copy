@@ -129,6 +129,8 @@ function SessionContent() {
   });
   const gazeAwayStartRef = useRef<number | null>(null);
   const gazeEventFiredRef = useRef(false);
+  const gazeReturnedAtRef = useRef<number | null>(null);
+  const GAZE_FORGIVENESS_MS = 1500;
 
   const gazeState = useGazeDetection(videoRef, phase === 'active');
   const audioState = useAudioDetection(
@@ -253,6 +255,7 @@ function SessionContent() {
 
     const gazeGraceMs = (profile?.gaze_threshold_seconds ?? 5) * 1000;
     if (flags.gazeAway) {
+      gazeReturnedAtRef.current = null;
       if (!gazeAwayStartRef.current) {
         gazeAwayStartRef.current = Date.now();
         gazeEventFiredRef.current = false;
@@ -267,9 +270,14 @@ function SessionContent() {
         requestNudge('gaze_away');
         playBeep();
       }
-    } else {
-      gazeAwayStartRef.current = null;
-      gazeEventFiredRef.current = false;
+    } else if (gazeAwayStartRef.current) {
+      if (!gazeReturnedAtRef.current) {
+        gazeReturnedAtRef.current = Date.now();
+      } else if (Date.now() - gazeReturnedAtRef.current >= GAZE_FORGIVENESS_MS) {
+        gazeAwayStartRef.current = null;
+        gazeEventFiredRef.current = false;
+        gazeReturnedAtRef.current = null;
+      }
     }
     if (flags.afk && !prev.afk) {
       statsRef.current.afkCount++;
