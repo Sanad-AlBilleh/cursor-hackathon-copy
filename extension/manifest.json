@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Zoned — Distraction Detector",
+  "version": "1.0.0",
+  "description": "Detects distracting websites during a Zoned focus session and reports them back to the session monitor.",
+  "permissions": ["tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://localhost:3001/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16":  "icon16.png",
+    "48":  "icon48.png",
+    "128": "icon128.png"
+  }
+}

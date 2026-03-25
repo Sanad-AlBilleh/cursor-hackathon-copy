@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -15,6 +16,7 @@ import {
   Play,
   AlertTriangle,
   CheckCircle2,
+  PictureInPicture2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -26,6 +28,7 @@ import { useAudioDetection } from '@/hooks/use-audio-detection';
 import { useTabDetection } from '@/hooks/use-tab-detection';
 import { useIdleDetection } from '@/hooks/use-idle-detection';
 import { useSessionTimer } from '@/hooks/use-session-timer';
+import { usePictureInPicture } from '@/hooks/use-picture-in-picture';
 import type {
   Profile,
   DistractionEventType,
@@ -136,6 +139,7 @@ function SessionContent() {
   const tabState = useTabDetection(phase === 'active');
   const idleState = useIdleDetection(phase === 'active');
   const timer = useSessionTimer(phase === 'active');
+  const pip = usePictureInPicture();
 
   // ------------------------------------------------------------------
   // Attach media stream to video element once both are available
@@ -240,7 +244,7 @@ function SessionContent() {
     const flags = {
       gazeAway: gazeState.isLookingAway || gazeState.noFaceDetected,
       afk: afkTriggered,
-      tabAway: tabState.isTabAway,
+      tabAway: tabState.isDistractedByTab,
       idle: idleState.isIdle,
       noisy: audioState.isNoisy,
     };
@@ -508,6 +512,8 @@ function SessionContent() {
       } catch {}
     }
 
+    pip.close();
+
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((t) => t.stop());
       mediaStreamRef.current = null;
@@ -522,13 +528,16 @@ function SessionContent() {
   const isDistracted =
     gazeState.isLookingAway ||
     gazeState.noFaceDetected ||
-    tabState.isTabAway ||
+    tabState.isDistractedByTab ||
     idleState.isIdle ||
     audioState.isNoisy;
 
   const distractionLabel = (() => {
     if (gazeState.noFaceDetected) return 'AFK — No face detected';
-    if (tabState.isTabAway) return 'Tab switched';
+    if (tabState.isDistractedByTab && tabState.distractingSite) {
+      const cat = tabState.distractingCategory ? ` · ${tabState.distractingCategory}` : '';
+      return `${tabState.distractingSite}${cat}`;
+    }
     if (gazeState.isLookingAway) return `Looking ${gazeState.gazeDirection}`;
     if (idleState.isIdle) return 'Idle — No activity';
     if (audioState.isNoisy) return `Noise: ${audioState.detectedType ?? 'detected'}`;
@@ -676,19 +685,42 @@ function SessionContent() {
                 {timer.formatted}
               </div>
 
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={endSession}
-                disabled={isEnding}
-              >
-                {isEnding ? (
-                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                ) : (
-                  <StopCircle className="w-4 h-4 mr-1" />
+              <div className="flex items-center gap-2">
+                {pip.isSupported && !pip.isActive && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pip.open(360, 300)}
+                    title="Pop out mini-monitor — stays on top while you work in other tabs"
+                  >
+                    <PictureInPicture2 className="w-4 h-4 mr-1" />
+                    Pop Out
+                  </Button>
                 )}
-                End Session
-              </Button>
+                {pip.isActive && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pip.close()}
+                  >
+                    <PictureInPicture2 className="w-4 h-4 mr-1" />
+                    Close PiP
+                  </Button>
+                )}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={endSession}
+                  disabled={isEnding}
+                >
+                  {isEnding ? (
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  ) : (
+                    <StopCircle className="w-4 h-4 mr-1" />
+                  )}
+                  End Session
+                </Button>
+              </div>
             </header>
 
             {/* Main content */}
@@ -708,7 +740,7 @@ function SessionContent() {
                 <StatCell
                   label="Tab switches"
                   value={statsRef.current.tabSwitchCount}
-                  active={tabState.isTabAway}
+                  active={tabState.isDistractedByTab}
                 />
                 <StatCell
                   label="Idle"
@@ -855,6 +887,25 @@ function SessionContent() {
         aria-hidden="true"
       />
 
+      {/* =================== Picture-in-Picture mini monitor =================== */}
+      {pip.isActive &&
+        pip.pipWindow &&
+        phase === 'active' &&
+        createPortal(
+          <PipMonitor
+            timer={timer.formatted}
+            isDistracted={isDistracted}
+            distractionLabel={distractionLabel}
+            distractingSite={tabState.distractingSite}
+            distractingCategory={tabState.distractingCategory}
+            stats={statsRef.current}
+            stream={mediaStreamRef.current}
+            onEnd={endSession}
+            isEnding={isEnding}
+          />,
+          pip.pipWindow.document.getElementById('pip-root')!,
+        )}
+
       {/* =================== Coach overlay =================== */}
       <AnimatePresence>
         {coachMessage && phase === 'active' && (
@@ -876,6 +927,158 @@ function SessionContent() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function PipMonitor({
+  timer,
+  isDistracted,
+  distractionLabel,
+  distractingSite,
+  distractingCategory,
+  stats,
+  stream,
+  onEnd,
+  isEnding,
+}: {
+  timer: string;
+  isDistracted: boolean;
+  distractionLabel: string | null;
+  distractingSite: string | null;
+  distractingCategory: string | null;
+  stats: SessionStats;
+  stream: MediaStream | null;
+  onEnd: () => void;
+  isEnding: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [stream]);
+
+  return (
+    <div
+      style={{
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        background: '#0a0a0a',
+        color: '#fafafa',
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '12px',
+        gap: '10px',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* Status + timer */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: isDistracted ? '#ef4444' : '#22c55e',
+              transition: 'background 0.3s',
+            }}
+          />
+          <span style={{ fontSize: '13px', fontWeight: 500 }}>
+            {isDistracted ? 'Distracted' : 'Focused'}
+          </span>
+        </div>
+        <span style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 700, letterSpacing: '0.05em' }}>
+          {timer}
+        </span>
+      </div>
+
+      {/* Distraction label */}
+      {distractionLabel && (
+        <div
+          style={{
+            background: 'rgba(239,68,68,0.15)',
+            color: '#f87171',
+            borderRadius: '9999px',
+            padding: '4px 12px',
+            fontSize: '12px',
+            fontWeight: 500,
+            textAlign: 'center',
+          }}
+        >
+          {distractionLabel}
+        </div>
+      )}
+
+      {/* Stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+        {[
+          { label: 'Gaze', value: stats.gazeAwayCount },
+          {
+            label: distractingSite
+              ? `${distractingSite}`
+              : distractingCategory
+                ? distractingCategory
+                : 'Tabs',
+            value: stats.tabSwitchCount,
+          },
+          { label: 'Idle', value: stats.staticPageCount },
+        ].map((s) => (
+          <div
+            key={s.label}
+            style={{
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '6px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '16px', fontWeight: 700 }}>{s.value}</div>
+            <div style={{ fontSize: '10px', color: '#a1a1aa' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Camera */}
+      <div
+        style={{
+          flex: 1,
+          borderRadius: '8px',
+          overflow: 'hidden',
+          background: '#18181b',
+          minHeight: 0,
+        }}
+      >
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+        />
+      </div>
+
+      {/* End button */}
+      <button
+        onClick={onEnd}
+        disabled={isEnding}
+        style={{
+          background: '#dc2626',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          padding: '8px 0',
+          fontSize: '13px',
+          fontWeight: 600,
+          cursor: 'pointer',
+          opacity: isEnding ? 0.6 : 1,
+        }}
+      >
+        {isEnding ? 'Ending...' : 'End Session'}
+      </button>
     </div>
   );
 }
