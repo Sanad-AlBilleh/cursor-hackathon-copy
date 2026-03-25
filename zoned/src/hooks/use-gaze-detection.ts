@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  FaceLandmarker,
+  FilesetResolver,
+  type FaceLandmarkerResult,
+  type NormalizedLandmark,
+} from '@mediapipe/tasks-vision';
 
 export interface GazeState {
   isLookingAway: boolean;
@@ -10,44 +16,27 @@ export interface GazeState {
   isLoading: boolean;
 }
 
-interface Landmark {
-  x: number;
-  y: number;
-  z: number;
-}
+const WASM_PATH = '/mediapipe/wasm';
+const MODEL_URL =
+  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
-interface FaceMeshResults {
-  multiFaceLandmarks?: Landmark[][];
-}
-
-const FACE_MESH_CDN =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js';
-
-const GAZE_X_THRESHOLD = 0.6;
-const GAZE_Y_THRESHOLD = 0.5;
-const DIRECTION_THRESHOLD = 0.3;
+const GAZE_X_ENTER = 0.45;
+const GAZE_X_EXIT = 0.3;
+const GAZE_Y_ENTER = 0.4;
+const GAZE_Y_EXIT = 0.25;
+const DIRECTION_THRESHOLD = 0.25;
 const CALIBRATION_SAMPLES = 20;
-const FRAME_INTERVAL_MS = 100;
 const NO_FACE_AFK_MS = 15_000;
+const SMOOTHING_WINDOW = 8;
 
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.crossOrigin = 'anonymous';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.head.appendChild(script);
-  });
-}
+const HEAD_YAW_WEIGHT = 0.4;
+const HEAD_PITCH_WEIGHT = 0.3;
 
-function computeGaze(landmarks: Landmark[]) {
+function computeGaze(landmarks: NormalizedLandmark[]) {
   const lIris = landmarks[468];
   const rIris = landmarks[473];
+  const lIris2 = landmarks[469];
+  const rIris2 = landmarks[474];
 
   const lInner = landmarks[133];
   const lOuter = landmarks[33];
@@ -59,8 +48,11 @@ function computeGaze(landmarks: Landmark[]) {
   const lEyeW = Math.abs(lOuter.x - lInner.x) || 0.001;
   const rEyeW = Math.abs(rOuter.x - rInner.x) || 0.001;
 
-  const lGazeX = (lIris.x - lEyeCenterX) / (lEyeW / 2);
-  const rGazeX = (rIris.x - rEyeCenterX) / (rEyeW / 2);
+  const lIrisAvgX = (lIris.x + lIris2.x) / 2;
+  const rIrisAvgX = (rIris.x + rIris2.x) / 2;
+
+  const lGazeX = (lIrisAvgX - lEyeCenterX) / (lEyeW / 2);
+  const rGazeX = (rIrisAvgX - rEyeCenterX) / (rEyeW / 2);
   const gazeX = (lGazeX + rGazeX) / 2;
 
   const lTop = landmarks[159];
@@ -73,11 +65,21 @@ function computeGaze(landmarks: Landmark[]) {
   const lEyeH = Math.abs(lBot.y - lTop.y) || 0.001;
   const rEyeH = Math.abs(rBot.y - rTop.y) || 0.001;
 
-  const lGazeY = (lIris.y - lEyeCenterY) / (lEyeH / 2);
-  const rGazeY = (rIris.y - rEyeCenterY) / (rEyeH / 2);
+  const lIrisAvgY = (lIris.y + lIris2.y) / 2;
+  const rIrisAvgY = (rIris.y + rIris2.y) / 2;
+
+  const lGazeY = (lIrisAvgY - lEyeCenterY) / (lEyeH / 2);
+  const rGazeY = (rIrisAvgY - rEyeCenterY) / (rEyeH / 2);
   const gazeY = (lGazeY + rGazeY) / 2;
 
   return { gazeX, gazeY };
+}
+
+function extractHeadPose(matrix: { rows: number; columns: number; data: number[] }) {
+  const m = matrix.data;
+  const yaw = Math.atan2(m[2], m[0]);
+  const pitch = Math.asin(-m[6]);
+  return { yaw, pitch };
 }
 
 export function useGazeDetection(
@@ -92,27 +94,122 @@ export function useGazeDetection(
     isLoading: false,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const faceMeshRef = useRef<any>(null);
+  const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const animFrameRef = useRef(0);
   const calibrationSamples = useRef<{ x: number; y: number }[]>([]);
   const baselineRef = useRef<{ x: number; y: number } | null>(null);
+  const baselineHeadRef = useRef<{ yaw: number; pitch: number } | null>(null);
   const lastFaceTimeRef = useRef(Date.now());
-  const lastProcessRef = useRef(0);
-  const loadedRef = useRef(false);
   const cancelledRef = useRef(false);
+  const gazeHistoryRef = useRef<{ x: number; y: number }[]>([]);
+  const isAwayRef = useRef(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const lastVideoTimeRef = useRef(-1);
+  const lastSentTsRef = useRef(0);
+
+  const processResult = useCallback(
+    (result: FaceLandmarkerResult) => {
+      if (!result.faceLandmarks || result.faceLandmarks.length === 0) {
+        const elapsed = Date.now() - lastFaceTimeRef.current;
+        if (elapsed >= NO_FACE_AFK_MS) {
+          setState((p) => ({ ...p, noFaceDetected: true }));
+        }
+        return;
+      }
+
+      lastFaceTimeRef.current = Date.now();
+      const landmarks = result.faceLandmarks[0];
+      if (landmarks.length < 478) return;
+
+      const { gazeX, gazeY } = computeGaze(landmarks);
+
+      let headYawDelta = 0;
+      let headPitchDelta = 0;
+      if (
+        result.facialTransformationMatrixes &&
+        result.facialTransformationMatrixes.length > 0
+      ) {
+        const mat = result.facialTransformationMatrixes[0];
+        const { yaw, pitch } = extractHeadPose(mat);
+
+        if (!baselineHeadRef.current) {
+          baselineHeadRef.current = { yaw, pitch };
+        }
+        headYawDelta = yaw - baselineHeadRef.current.yaw;
+        headPitchDelta = pitch - baselineHeadRef.current.pitch;
+      }
+
+      if (!baselineRef.current) {
+        calibrationSamples.current.push({ x: gazeX, y: gazeY });
+        if (calibrationSamples.current.length >= CALIBRATION_SAMPLES) {
+          const samples = calibrationSamples.current;
+          const avgX = samples.reduce((s, p) => s + p.x, 0) / samples.length;
+          const avgY = samples.reduce((s, p) => s + p.y, 0) / samples.length;
+          baselineRef.current = { x: avgX, y: avgY };
+          setState((p) => ({ ...p, isCalibrated: true, noFaceDetected: false }));
+        } else {
+          setState((p) => ({ ...p, noFaceDetected: false }));
+        }
+        return;
+      }
+
+      const cx =
+        gazeX - baselineRef.current.x + headYawDelta * HEAD_YAW_WEIGHT;
+      const cy =
+        gazeY - baselineRef.current.y + headPitchDelta * HEAD_PITCH_WEIGHT;
+
+      gazeHistoryRef.current.push({ x: cx, y: cy });
+      if (gazeHistoryRef.current.length > SMOOTHING_WINDOW) {
+        gazeHistoryRef.current.shift();
+      }
+
+      const history = gazeHistoryRef.current;
+      const smoothX = history.reduce((s, p) => s + p.x, 0) / history.length;
+      const smoothY = history.reduce((s, p) => s + p.y, 0) / history.length;
+
+      const wasAway = isAwayRef.current;
+      let lookingAway: boolean;
+      if (wasAway) {
+        lookingAway = Math.abs(smoothX) > GAZE_X_EXIT || smoothY > GAZE_Y_EXIT;
+      } else {
+        lookingAway =
+          Math.abs(smoothX) > GAZE_X_ENTER || smoothY > GAZE_Y_ENTER;
+      }
+      isAwayRef.current = lookingAway;
+
+      let direction: GazeState['gazeDirection'] = 'center';
+      if (Math.abs(smoothX) > DIRECTION_THRESHOLD) {
+        direction = smoothX < 0 ? 'left' : 'right';
+      } else if (Math.abs(smoothY) > DIRECTION_THRESHOLD) {
+        direction = smoothY > 0 ? 'down' : 'up';
+      }
+
+      setState({
+        isLookingAway: lookingAway,
+        gazeDirection: direction,
+        noFaceDetected: false,
+        isCalibrated: true,
+        isLoading: false,
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!enabled) {
       cancelledRef.current = true;
       cancelAnimationFrame(animFrameRef.current);
-      if (faceMeshRef.current) {
-        try { faceMeshRef.current.close(); } catch {}
-        faceMeshRef.current = null;
+      if (cleanupRef.current) cleanupRef.current();
+      if (landmarkerRef.current) {
+        landmarkerRef.current.close();
+        landmarkerRef.current = null;
       }
-      loadedRef.current = false;
       calibrationSamples.current = [];
       baselineRef.current = null;
+      baselineHeadRef.current = null;
+      gazeHistoryRef.current = [];
+      isAwayRef.current = false;
+      lastVideoTimeRef.current = -1;
       setState({
         isLookingAway: false,
         gazeDirection: 'center',
@@ -128,112 +225,59 @@ export function useGazeDetection(
 
     async function init() {
       try {
-        await loadScript(FACE_MESH_CDN);
+        const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
         if (cancelledRef.current) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const W = window as any;
-        const FMClass = W.FaceMesh;
-        if (!FMClass) throw new Error('FaceMesh global not found');
-
-        const fm = new FMClass({
-          locateFile: (file: string) =>
-            `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/${file}`,
-        });
-
-        fm.setOptions({
-          maxNumFaces: 1,
-          refineLandmarks: true,
-          minDetectionConfidence: 0.5,
+        const landmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: MODEL_URL },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          minFaceDetectionConfidence: 0.5,
+          minFacePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: true,
         });
 
-        fm.onResults((results: FaceMeshResults) => {
-          if (cancelledRef.current) return;
-          processResults(results);
-        });
-
-        await fm.initialize();
         if (cancelledRef.current) {
-          fm.close();
+          landmarker.close();
           return;
         }
 
-        faceMeshRef.current = fm;
-        loadedRef.current = true;
+        landmarkerRef.current = landmarker;
         setState((p) => ({ ...p, isLoading: false }));
         startLoop();
       } catch (err) {
-        console.warn('MediaPipe FaceMesh unavailable — gaze detection disabled:', err);
+        console.warn(
+          'MediaPipe FaceLandmarker unavailable — gaze detection disabled:',
+          err,
+        );
         setState((p) => ({ ...p, isLoading: false }));
-        tryFallback();
       }
-    }
-
-    function tryFallback() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ('FaceDetector' in window) {
-        startFallbackLoop();
-      }
-    }
-
-    function startFallbackLoop() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const W = window as any;
-      let detector: any;
-      try {
-        detector = new W.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-      } catch {
-        return;
-      }
-
-      let active = true;
-      async function loop() {
-        if (!active || cancelledRef.current) return;
-        const video = videoRef.current;
-        if (video && video.readyState >= 2) {
-          try {
-            const faces = await detector.detect(video);
-            const hasFace = faces.length > 0;
-            if (hasFace) {
-              lastFaceTimeRef.current = Date.now();
-              setState((p) => ({ ...p, noFaceDetected: false, isCalibrated: true }));
-            } else {
-              const elapsed = Date.now() - lastFaceTimeRef.current;
-              if (elapsed >= NO_FACE_AFK_MS) {
-                setState((p) => ({ ...p, noFaceDetected: true }));
-              }
-            }
-          } catch {}
-        }
-        if (active) {
-          animFrameRef.current = window.setTimeout(loop, 500) as unknown as number;
-        }
-      }
-      loop();
-
-      return () => {
-        active = false;
-      };
     }
 
     function startLoop() {
       let active = true;
 
-      async function loop() {
+      function loop() {
         if (!active || cancelledRef.current) return;
 
-        const now = performance.now();
+        const video = videoRef.current;
         if (
-          now - lastProcessRef.current >= FRAME_INTERVAL_MS &&
-          videoRef.current &&
-          videoRef.current.readyState >= 2 &&
-          faceMeshRef.current
+          video &&
+          video.readyState >= 2 &&
+          landmarkerRef.current &&
+          video.currentTime !== lastVideoTimeRef.current
         ) {
-          lastProcessRef.current = now;
-          try {
-            await faceMeshRef.current.send({ image: videoRef.current });
-          } catch {}
+          lastVideoTimeRef.current = video.currentTime;
+          const nowMs = performance.now();
+          if (nowMs > lastSentTsRef.current) {
+            lastSentTsRef.current = nowMs;
+            try {
+              const result = landmarkerRef.current.detectForVideo(video, nowMs);
+              processResult(result);
+            } catch { /* WASM info logs may surface here in dev — safe to ignore */ }
+          }
         }
 
         if (active && !cancelledRef.current) {
@@ -243,11 +287,10 @@ export function useGazeDetection(
 
       animFrameRef.current = requestAnimationFrame(loop);
 
-      const cleanup = () => {
+      cleanupRef.current = () => {
         active = false;
         cancelAnimationFrame(animFrameRef.current);
       };
-      cleanupRef.current = cleanup;
     }
 
     init();
@@ -256,68 +299,13 @@ export function useGazeDetection(
       cancelledRef.current = true;
       cancelAnimationFrame(animFrameRef.current);
       if (cleanupRef.current) cleanupRef.current();
-      if (faceMeshRef.current) {
-        try { faceMeshRef.current.close(); } catch {}
-        faceMeshRef.current = null;
+      if (landmarkerRef.current) {
+        landmarkerRef.current.close();
+        landmarkerRef.current = null;
       }
-      loadedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
-
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  function processResults(results: FaceMeshResults) {
-    const faces = results.multiFaceLandmarks;
-
-    if (!faces || faces.length === 0) {
-      const elapsed = Date.now() - lastFaceTimeRef.current;
-      if (elapsed >= NO_FACE_AFK_MS) {
-        setState((p) => ({ ...p, noFaceDetected: true }));
-      }
-      return;
-    }
-
-    lastFaceTimeRef.current = Date.now();
-    const landmarks = faces[0];
-    if (landmarks.length < 478) return;
-
-    const { gazeX, gazeY } = computeGaze(landmarks);
-
-    if (!baselineRef.current) {
-      calibrationSamples.current.push({ x: gazeX, y: gazeY });
-      if (calibrationSamples.current.length >= CALIBRATION_SAMPLES) {
-        const samples = calibrationSamples.current;
-        const avgX = samples.reduce((s, p) => s + p.x, 0) / samples.length;
-        const avgY = samples.reduce((s, p) => s + p.y, 0) / samples.length;
-        baselineRef.current = { x: avgX, y: avgY };
-        setState((p) => ({ ...p, isCalibrated: true, noFaceDetected: false }));
-      } else {
-        setState((p) => ({ ...p, noFaceDetected: false }));
-      }
-      return;
-    }
-
-    const cx = gazeX - baselineRef.current.x;
-    const cy = gazeY - baselineRef.current.y;
-
-    const lookingAway = Math.abs(cx) > GAZE_X_THRESHOLD || cy > GAZE_Y_THRESHOLD;
-
-    let direction: GazeState['gazeDirection'] = 'center';
-    if (Math.abs(cx) > DIRECTION_THRESHOLD) {
-      direction = cx < 0 ? 'left' : 'right';
-    } else if (Math.abs(cy) > DIRECTION_THRESHOLD) {
-      direction = cy > 0 ? 'down' : 'up';
-    }
-
-    setState({
-      isLookingAway: lookingAway,
-      gazeDirection: direction,
-      noFaceDetected: false,
-      isCalibrated: true,
-      isLoading: false,
-    });
-  }
+  }, [enabled, processResult]);
 
   return state;
 }
