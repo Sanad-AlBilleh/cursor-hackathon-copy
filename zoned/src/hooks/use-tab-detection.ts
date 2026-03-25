@@ -55,7 +55,6 @@ export function useTabDetection(enabled: boolean) {
       });
       hiddenAtRef.current = null;
       switchCountRef.current = 0;
-      blurredRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
       return;
     }
